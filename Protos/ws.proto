@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcHttp3Demo.Protos";
+
+package ws;
+
+import "signaling.proto";
+import "google/protobuf/empty.proto";
+
+// WS 外层信封：用于把原本 gRPC 的请求/响应复用到 WebSocket + Protobuf 上
+message WsEnvelope {
+  // 用于请求-响应关联（客户端生成，服务端原样回传）
+  string request_id = 1;
+
+  oneof payload {
+    // client -> server
+    signaling.RegisterRequest register = 10;
+    signaling.PairRequest pair = 11;
+    signaling.SubscribeRequest subscribe = 12;
+    signaling.ListUnpairedRequest list_unpaired = 13;
+    signaling.Heartbeat ping = 14;
+    signaling.VideoConfig video_config = 15;
+    // client -> server (接收端对 video_config 事件的 ACK)
+    signaling.VideoConfigAck ack_video_config = 16;
+    // client -> server (拉取 P2P 信息；session 从 metadata/header 解析)
+    google.protobuf.Empty get_p2p_info = 17;
+    signaling.AudioConfig audio_config = 18;
+    // client -> server (接收端对 audio_config 事件的 ACK)
+    signaling.AudioConfigAck ack_audio_config = 19;
+
+    // server -> client
+    signaling.RegisterResponse register_response = 20;
+    signaling.PairResponse pair_response = 21;
+    signaling.SubscribeResponse subscribe_response = 22;
+    signaling.ListUnpairedResponse list_unpaired_response = 23;
+    signaling.HeartbeatAck ping_ack = 24;
+    // server -> client (PublishVideoConfig 的响应)
+    signaling.VideoConfigAck publish_video_config_ack = 25;
+    // server -> client (GetP2pInfo 的响应)
+    signaling.GetP2pInfoResponse get_p2p_info_response = 26;
+    // server -> client (PublishAudioConfig 的响应)
+    signaling.AudioConfigAck publish_audio_config_ack = 27;
+
+    // server -> client (事件推送)
+    signaling.EventMessage event = 30;
+
+    // server -> client (错误)
+    WsError error = 40;
+  }
+}
+
+message WsError {
+  string code = 1;
+  string message = 2;
+}

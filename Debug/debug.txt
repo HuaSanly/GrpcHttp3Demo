@@ -1,0 +1,505 @@
+info: GrpcHttp3Demo.Infrastructure.Background.SessionCleanupService[0]
+      Session Cleanup Service started.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Media Server started on port 7778
+dbug: Microsoft.AspNetCore.Watch.BrowserRefresh.BlazorWasmHotReloadMiddleware[0]
+      Middleware loaded
+dbug: Microsoft.AspNetCore.Watch.BrowserRefresh.BrowserScriptMiddleware[0]
+      Middleware loaded. Script /_framework/aspnetcore-browser-refresh.js (16511 B).
+dbug: Microsoft.AspNetCore.Watch.BrowserRefresh.BrowserScriptMiddleware[0]
+      Middleware loaded. Script /_framework/blazor-hotreload.js (799 B).
+dbug: Microsoft.AspNetCore.Watch.BrowserRefresh.BrowserRefreshMiddleware[0]
+      Middleware loaded: DOTNET_MODIFIABLE_ASSEMBLIES=debug, __ASPNETCORE_BROWSER_TOOLS=true
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://[::]:7776
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: https://[::]:7777
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: P:\engineeringproject\GrpcHttp3Demo
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=LOCALSERVER-WIN, Role=Robot, IP=::ffff:192.168.3.18:64693
+[ConnMgr] gRPC Registered: session=a3694c7b-903e-48f0-a458-0ec0277632f0 device=LOCALSERVER-WIN role=Robot
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427568436
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:51671 session=a3694c7b... ts=1767427570 sig=d2b0deac...
+[ConnMgr] UDP Registered: session a3694c7b-903e-48f0-a458-0ec0277632f0 -> 192.168.3.18:51671
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Handshake Success: a3694c7b-903e-48f0-a458-0ec0277632f0 at 192.168.3.18:51671
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427583467
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427598476
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427613486
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427628494
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427643507
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427658516
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427673524
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427688534
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427703555
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427718570
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a3694c7b-903e-48f0-a458-0ec0277632f0, ClientTime=1767427733582
+[ConnMgr] Session timed out: a3694c7b-903e-48f0-a458-0ec0277632f0
+[ConnMgr] Unregistered session: a3694c7b-903e-48f0-a458-0ec0277632f0
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=LOCALSERVER-WIN, Role=Robot, IP=::ffff:192.168.3.18:57460
+[ConnMgr] gRPC Registered: session=970163fd-5369-4a1f-8156-0a15e1757f7a device=LOCALSERVER-WIN role=Robot
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430654933
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430655 sig=0e3b9d8d...
+[ConnMgr] UDP Registered: session 970163fd-5369-4a1f-8156-0a15e1757f7a -> 192.168.3.18:57306
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Handshake Success: 970163fd-5369-4a1f-8156-0a15e1757f7a at 192.168.3.18:57306
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430669944
+info: WebSocketProto[0]
+      [WS/Proto] Connected (no session attached yet)
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=2b70a67af54272a38bba7614319f6984, Role=Vr, IP=::ffff:192.168.3.6:37604
+[ConnMgr] gRPC Registered: session=8b7a2f19-203f-4080-9b9e-0fa069680f10 device=2b70a67af54272a38bba7614319f6984 role=Vr
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.6:47913 session=8b7a2f19... ts=1767430685 sig=fbda9eeb...
+[ConnMgr] UDP Registered: session 8b7a2f19-203f-4080-9b9e-0fa069680f10 -> 192.168.3.6:47913
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Handshake Success: 8b7a2f19-203f-4080-9b9e-0fa069680f10 at 192.168.3.6:47913
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430684956
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430697708
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430699968
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430712725
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430714978
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430727730
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430730022
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430742737
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430745038
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430757742
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430760053
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430772751
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430775064
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=8b7a2f19-203f-4080-9b9e-0fa069680f10, ClientTime=1767430787757
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=970163fd-5369-4a1f-8156-0a15e1757f7a, ClientTime=1767430790074
+warn: WebSocketProto[0]
+      [WS/Proto] Connection aborted: The remote party closed the WebSocket connection without completing the close handshake.
+info: WebSocketProto[0]
+      [WS/Proto] Disconnected: 8b7a2f19-203f-4080-9b9e-0fa069680f10. EventSender detached.
+[ConnMgr] Session timed out: 8b7a2f19-203f-4080-9b9e-0fa069680f10
+[ConnMgr] Unregistered session: 8b7a2f19-203f-4080-9b9e-0fa069680f10
+[ConnMgr] Session timed out: 970163fd-5369-4a1f-8156-0a15e1757f7a
+[ConnMgr] Unregistered session: 970163fd-5369-4a1f-8156-0a15e1757f7a
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430840 sig=0f1fc10c...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430841 sig=1311b841...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430842 sig=42c41b82...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430843 sig=3a908991...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430844 sig=73b5a567...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430850 sig=19e730da...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430851 sig=b4e9113b...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430852 sig=7fe0fded...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430853 sig=9dbe9b16...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430854 sig=505bb5cf...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430860 sig=9f75ae21...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430861 sig=d844759e...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430862 sig=11036fbe...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430863 sig=96469c14...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430864 sig=838f92fe...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430870 sig=e1faa3de...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430871 sig=ee8c57d4...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430872 sig=b9f50a3a...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430873 sig=5f7b7c33...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430874 sig=2596f1e9...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430880 sig=1358caed...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430881 sig=af078f6b...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430882 sig=0957262b...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430883 sig=d3643079...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430884 sig=e0604799...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430890 sig=d6f78b60...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430891 sig=b4ec715c...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430892 sig=3df89d7a...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430893 sig=5e7ba15f...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430894 sig=9c3ca2be...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430900 sig=1c2660c7...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430901 sig=b3d4172b...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430902 sig=b76e74e3...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430903 sig=f2c37a4f...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430904 sig=7ede7bbe...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430910 sig=d238b27d...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430911 sig=3f0b8f20...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430912 sig=8a4cb6ef...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430913 sig=690486d0...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430914 sig=ef939d22...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430920 sig=51229f5f...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430921 sig=4b622c1f...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430922 sig=dd2554e2...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430923 sig=ff3c3435...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430924 sig=8897256f...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430930 sig=a6ccdc87...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430931 sig=1eced7df...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:57306 session=970163fd... ts=1767430932 sig=8092cf94...
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session 970163fd-5369-4a1f-8156-0a15e1757f7a not found.
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=LOCALSERVER-WIN, Role=Robot, IP=::ffff:192.168.3.18:57201
+[ConnMgr] gRPC Registered: session=95fda95e-f5c1-4c0f-83a1-78805b11a686 device=LOCALSERVER-WIN role=Robot
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767431962825
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.18:61251 session=95fda95e... ts=1767431963 sig=5a2e0295...
+[ConnMgr] UDP Registered: session 95fda95e-f5c1-4c0f-83a1-78805b11a686 -> 192.168.3.18:61251
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Handshake Success: 95fda95e-f5c1-4c0f-83a1-78805b11a686 at 192.168.3.18:61251
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767431977838
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767431992846
+info: WebSocketProto[0]
+      [WS/Proto] Connected (no session attached yet)
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=2b70a67af54272a38bba7614319f6984, Role=Vr, IP=::ffff:192.168.3.6:60448
+[ConnMgr] gRPC Registered: session=a78d9a20-31e6-46d0-be81-8f323c459ee3 device=2b70a67af54272a38bba7614319f6984 role=Vr
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      [UDP:HELLO] from=192.168.3.6:37666 session=a78d9a20... ts=1767432007 sig=711d9137...
+[ConnMgr] UDP Registered: session a78d9a20-31e6-46d0-be81-8f323c459ee3 -> 192.168.3.6:37666
+info: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Handshake Success: a78d9a20-31e6-46d0-be81-8f323c459ee3 at 192.168.3.6:37666
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767432007855
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a78d9a20-31e6-46d0-be81-8f323c459ee3, ClientTime=1767432012673
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767432022868
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=a78d9a20-31e6-46d0-be81-8f323c459ee3, ClientTime=1767432027681
+warn: WebSocketProto[0]
+      [WS/Proto] Connection aborted: The remote party closed the WebSocket connection without completing the close handshake.
+info: WebSocketProto[0]
+      [WS/Proto] Disconnected: a78d9a20-31e6-46d0-be81-8f323c459ee3. EventSender detached.
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767432037880
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=95fda95e-f5c1-4c0f-83a1-78805b11a686, ClientTime=1767432052915
+[ConnMgr] Session timed out: a78d9a20-31e6-46d0-be81-8f323c459ee3
+[ConnMgr] Unregistered session: a78d9a20-31e6-46d0-be81-8f323c459ee3
+[ConnMgr] Session timed out: 95fda95e-f5c1-4c0f-83a1-78805b11a686
+[ConnMgr] Unregistered session: 95fda95e-f5c1-4c0f-83a1-78805b11a686
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=007, Role=Robot, IP=::ffff:192.168.3.17:50432
+[ConnMgr] gRPC Registered: session=3ce25ba5-fa23-4f33-8ba5-964087e96691 device=007 role=Robot
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=3ce25ba5-fa23-4f33-8ba5-964087e96691, ClientTime=1767432145234
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=3ce25ba5-fa23-4f33-8ba5-964087e96691, ClientTime=1767432160234
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=3ce25ba5-fa23-4f33-8ba5-964087e96691, ClientTime=1767432175234
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=3ce25ba5-fa23-4f33-8ba5-964087e96691, ClientTime=1767432190234
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=007, Role=Robot, IP=::ffff:192.168.3.17:41178
+[ConnMgr] Duplicate identity detected. Kicking old session: 3ce25ba5-fa23-4f33-8ba5-964087e96691 (device=007 role=Robot)
+[ConnMgr] Unregistered session: 3ce25ba5-fa23-4f33-8ba5-964087e96691
+[ConnMgr] gRPC Registered: session=1bea3202-48bd-45bd-954e-47e47a881819 device=007 role=Robot
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=1bea3202-48bd-45bd-954e-47e47a881819, ClientTime=1767432217171
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=1bea3202-48bd-45bd-954e-47e47a881819, ClientTime=1767432232171
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=1bea3202-48bd-45bd-954e-47e47a881819, ClientTime=1767432247171
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Ping] Session=1bea3202-48bd-45bd-954e-47e47a881819, ClientTime=1767432262171
+[ConnMgr] Session timed out: 1bea3202-48bd-45bd-954e-47e47a881819
+[ConnMgr] Unregistered session: 1bea3202-48bd-45bd-954e-47e47a881819
+info: GrpcHttp3Demo.Core.Services.SignalingAppService[0]
+      [Register] DeviceId=007, Role=Robot, IP=::ffff:192.168.3.17:38688
+[ConnMgr] gRPC Registered: session=ffe5f9da-f57a-47ce-b8af-80fd6a6fdffb device=007 role=Robot
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session "??-???pL?+M?␦?=???i?␦7d?^G???o6?j?ɑ?? }Z??&?$C???SV V???,0a???xS??R???Z?B(?a
+O???
+    ????z[?#etFg?
+                 ???k,?l??'P??9n?????
+                                     ??j4?????+????V??md?(?`?9r?H?[á?$
+                                                                      ??'
+?L?s8H?yP?B??m#2{*?V????4?C?Gq?;I_+??????~?;}?3y??Y??qm'??M.lO?O?
+j??P?;?;Z?-?jmv??f??<???0??'?e?#??_?L?L????Vf??????\j            y?'?$??gW0?9??k,?
+                       @??????n??
+?J[g?(k[?E?@?o0???jU??h??I?V?1
+?!?BW?~ ?án?CZl???????2?T}??GX?G?0?>? not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session RDq??$歷[Ne? 5`}?O\)}??? ?n4w
+5?k^5Q!?c?Q???-??
+V????\{?????*??c;O?j?%;?>?m?r?9B]?ef??5?Y?????<-H
+                                                 ??kF?[F?!?L????xq???]??=qcD;?]YDl?f?S?_??&j
+                                                                                            ??k?x?˙,???N???DqX??φ9t7?! G-?[???0?'?[?D"IS?3????3{&?[0???]J??S??f???6 not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+?A?k;FL?*?-mn:??&iled: Session ?C3A
+                 ????H?78l???d?t?B(n???z? not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session ?C??TC?~0???:t??k???x^?X]?H??^???R?}3
+???h&??4?␦?0?V?KrX?[<?g????Hm???-?&?G??DtC?UEv`??J51q???qY-?+?2?
+
+                                                                ???~?␦jD?2?hAZ%?        <?NzΕXX?????o?j?s??qB??pG^l?a?ev?3??!b?????g???p??'?]??ǔ?[?Wr?gA??4??c?????[sT???>=?$?獻#?27?4?,??h????`??8i??(Z??8r??????f8(???'?sb    ?i?IY?Ad?S??V??"?
+ 8/?"??
+@??ko???t?h?]?????\"?&>?%? not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session \?v?D?Ю?1N??yF??"D??k??86?5?`????????h?????$?u??J??úr??bl14??????GTm?l??????#???N???]? o)??=?v????Kr??(??t??????$??
+                          ???x'??Q??z??)WA>????]?#_'?O?~AmV'?Z??a?gjˇ????{?/?5?????0??????;E??C6?ekpx????n
+?uv???I?r-0?~?h??Y??;?w
+                       M2?.????捄)?Fb?V??E????O?%?I??5T#Q?/?8??u6?B?h?-K???@,?Fk?MB"??i?????????/?RD]???B1?z??V]??w"?~???}s>Α?,?}?%KI??A?R6?d]iW??li
+                            ?V???vB>s?
+                                      S4(d-V??)???;?uMi?5??????????????!M#-???-z?3k?Ψ&kyD?Z1?:??-       ?jtu???VW9?g????@?Y?_jByj??????J??]?&??3`???;?????]g?;?%?7?
+                                           ?h?7"?ì??}??9.j+b??"?L?$H???2~R2??/_?qx?????'w`S:?
+                                                                                             ?(??Amo??Bb??-?l??"?2?4??D␦y>??????[[?[h???V#???hdi??l?I??e?q1?ǒ??I??)??<??QY~z??KW?h#?????f\e8?6?
+                                                                       $??????[?u?uUM??q!~? ?H??z?g"␦??u
+                                                                                                        ????,?N2?E??m7}??f? not found.=V????D?}Ьn?&??C??j?????~?:2???'HyE????v?R? ?,??????7
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session O??+)ux?ag??@(???ˇ??P?&?/?????7?2*:xNp?-?g!?0?J??Ax?p??V$?{H?F????vp%??2?`JV?B6t?G5)+Q??s?X^????????yw?)w?y????
+                      ???P>??/7?????s????       =?O"d?w??U?TkN
+                                                              ?%??/?:?_MR?b??c?*K??~??Ta?;?,??k????B??????Q???j??e97 not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+?1?   UDP Auth Failed: Session ?:n??U?g8e?;????????E$??e?
+??K?C1>
+ 4i???K??~W?:?Ub~#??y?????^??T`H????????~X?B"
+                                             h[? not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+???%x??\]?@uth F4w?-9?!a?U?????k??U??????0M??????c??????s??'J?d?Z?{???? c???Fx??@??A'??}?6?<????
+                                                                                                V␦'*["??\#?i?9'????S?;??????g??l?G??uM?????5{
+au?3?sU??n=?n?,??H?x??0???R?-?h???O??e?????#=~???A?<T?H5~8J`??????"?eH?K??#??)?????,?R?{?ap=5??th??zS???,??)n?k???h*?j
+                                                                                                                      ??>?}?$?^?0ě?
+?6??%6??????>Q???k?S?g????k???a??j?? M@6B?O?
+                                as?L???a?a?????;+?$␦J??HJk
+??T?8?Fa?l?""??及r?r?O^>?5lI?S"
+%Sn<ktE??>????A7??
+                  ????-kE?Qm&j?@b`␦??j???G}!??????2??7???#wW?7??*ZD?o??D&
+??M??+
+      a?'c?'K????"&??B?]?=!#3 ?,??R␦?[_U(?????.?X?(O␦P?"RA,"]?nTa?)?D?Wd*????t5??WU␦???"?=??#0!??譯??W not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+E4???hSY??E?\???r???m?O?????Fir???OxZ?????I{?%??\???x?Q%w?@6?????Z?1.?a???9?8??da?:?9?l?S??
+?d"???H?L?~?A.7k???8??!?+?0?
+                            ?~R&?/Q???'?`vl??
+                                             ???.иJo??"#C????1??H?-PV\??,"4?/Z2U?myf?`?E?I??
+                                                                                            ??????X?!??v???7=??U?5??Lc??Y?
+                                                                                                                          ?pα???d ??X3??L?BB
+[???????w???VMl not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+y??T?}?C??o?R?P?????X???:??ron ?/?????V?G)nj?.????i??@???s????bP????.?I!??'!{   ??U?[??,??
+?2 not found.               ?@?-????c?
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session K?Tm??y?3Vt???C\?\?mD?9?T?o?
+                                                           `fh?+
+                                                                ??<2?????
+i?2'?U?J-??D-?c?Cd?z+??s<f????}???zD5??f?!?.?)As?.?V?:y????r?4??+????8hy??TR??4?8I???"??Jɡ?Z!?-?r>d?)?????-4a?i?P?@?-?8??o?@U<
+                                                                            !??*??7?侸??        ?2wx?J????I)I?*???sd%?L
+                                                                                                                       ?????????z\??C4?????'??I?'?0??nw?VDi??E??{????B??k? ??T?YElx*z??\???R?~ not found.
+warn: GrpcHttp3Demo.Infrastructure.Background.UdpMediaServer[0]
+      UDP Auth Failed: Session ???cF?????1?U?R?6???~?мjOn?h?????@??????w??(=Z?n??kV?j???jr?????x??????o) ^?
+                                                                                                           ??qeN!????j#?$m?v9?egQ??]
+                                                                                                                                    xuQ9???p?el???H??,?a?H?AK??;N?{J?
+  ??Z0??
+        ??????
+              y?I???^v???????{???LL=w???X???.????????}??????C?&?????????0d??(R??G???N?&?w???\?B??wu??$??ug?B?
+                                                                                                             ?_??A??
+3??fc$i^??O??
+             ?B>E@?D(?6????$?{?d/<??h?ɡ??xW"
+                                            ???
+                                               Tu???{??ARaZ??B???H??N?
+                                                                      $8
+                                                                        ^Ay?~????N?C?$?`2???>c??E
+                                                                                                 ??M??9Zx4Od?RK??:???2???,?-?q)??
+                                                                                                                                 [R??A?????Yo[???w?D&??NA??2??4?????n??!???<???q?C?J?M?? not found.
+[ConnMgr] Session timed out: ffe5f9da-f57a-47ce-b8af-80fd6a6fdffb
+[ConnMgr] Unregistered session: ffe5f9da-f57a-47ce-b8af-80fd6a6fdffb
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...

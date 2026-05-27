@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcHttp3Demo.Protos";
+
+package agent;
+
+service Agent {
+  // 双向流式对话：Robot 发送多模态数据，Server 返回推理结果
+  rpc Chat (stream ChatRequest) returns (stream ChatResponse);
+}
+
+message ChatRequest {
+  string session_id = 1;
+  
+  oneof payload {
+    // 1. 文本指令 / 对话
+    string text = 10;
+    
+    // 2. 音频数据块 (PCM/WAV/Opus)
+    bytes audio_chunk = 11;
+    
+    // 3. 图片数据 (JPG/PNG)
+    bytes image_data = 12;
+    
+    // 4. 结束标记 (可选，用于显式告诉 AI 说话结束)
+    bool end_of_speech = 13;
+  }
+}
+
+message ChatResponse {
+  oneof payload {
+    // 1. 识别出的文本 (STT 结果)
+    string recognized_text = 10;
+    
+    // 2. LLM 回复的文本 (流式生成)
+    string llm_text = 11;
+    
+    // 3. 结构化指令 (JSON 格式，用于控制机器人动作)
+    string intent_json = 12;
+  }
+}

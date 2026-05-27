@@ -1,0 +1,267 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcHttp3Demo.Protos";
+
+package signaling;
+
+import "google/protobuf/empty.proto";
+
+// --- 1. HELLO (注册) ---
+message RegisterRequest {
+  string token = 1;
+  EndpointType role = 2;
+  string device_id = 3; // 展示用，允许重复
+  int32 robot_generation = 4; // 仅机器人使用；VR 传 0
+  
+  enum EndpointType {
+    UNKNOWN = 0;
+    ROBOT = 1;
+    VR = 2;
+  }
+}
+
+// --- 7. 列出未配对的对端 ---
+message ListUnpairedRequest {
+  // 可选筛选角色，留空则根据发起端自动取反：VR请求列出机器人，机器人请求列出VR
+  RegisterRequest.EndpointType desired_role = 1;
+}
+
+message ListUnpairedResponse {
+  repeated UnpairedEndpoint endpoints = 1;
+}
+
+message UnpairedEndpoint {
+  string session_id = 1;
+  string device_id = 2;
+  RegisterRequest.EndpointType role = 3;
+  int32 robot_generation = 4;
+}
+
+message EndpointInfo {
+  string session_id = 1;
+  string device_id = 2;
+  RegisterRequest.EndpointType role = 3;
+  int32 robot_generation = 4;
+}
+
+// --- 8. 事件订阅与推送 ---
+message EventSubscribe {
+  string session_id = 1; // 客户端自己的 SessionId，用于绑定事件流
+}
+
+message PairEvent {
+  enum Op {
+    REQUEST = 0;
+    ACCEPT = 1;
+    REJECT = 2;
+    UNPAIR = 3;
+  }
+  Op op = 1;
+  EndpointInfo peer = 2;
+}
+
+message EventMessage {
+  string sender_session_id = 1;
+  string target_session_id = 2;
+  int64 timestamp = 3;
+
+  oneof payload {
+    PairEvent pair = 10;
+    SystemCommand system = 11; // [新增] 系统指令
+    VideoConfig video_config = 12; // [新增] 视频参数同步（转发给配对端/订阅者）
+    AudioConfig audio_config = 13; // [新增] 音频参数同步（转发给配对端/订阅者）
+  }
+}
+
+message SystemCommand {
+  enum Action {
+    UNKNOWN = 0;
+    RECONNECT_GRPC = 1; // 服务端要求客户端重连 gRPC
+    REQUEST_PING = 2;   // 服务端要求客户端恢复/加快心跳（通常也意味着需要重建推送通道）
+    REQUEST_UDP_HELLO = 3; // 服务端要求客户端重发 UDP HELLO（重建 UDP 端点映射）
+  }
+  Action action = 1;
+}
+
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+  string session_id = 3; // [新增] 唯一会话ID，用于UDP握手
+  string client_ip = 4;  // [新增] 你的公网IP
+  int32 client_port = 5; // [新增] 你的公网端口
+}
+
+// --- 2. PING (心跳) ---
+message Heartbeat {
+  // Unix 时间戳（毫秒，UTC，Unix epoch: 1970-01-01T00:00:00Z）
+  // 建议使用：DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+  int64 client_time = 1;
+}
+
+message HeartbeatAck {
+  // Unix 时间戳（毫秒，UTC，Unix epoch）
+  int64 server_time = 1;
+  bool push_connected = 2; // [改名] 服务端视角的推送通道状态（WS 或 gRPC streaming）
+}
+
+// --- 3. PAR1 (配对 - 三方握手) ---
+message PairRequest {
+  Operation op = 1;
+  string peer_session_id = 2; 
+  PairState state = 3; // [新增] 对应 Flags
+  
+  enum Operation {
+    PAIR = 0;
+    UNPAIR = 1;
+  }
+  
+  enum PairState {
+    REQUEST = 0;  // Flags 0x00: 发起请求 / 通知机器人
+    PENDING = 1;  // Flags 0x01: 服务器收到，处理中
+    ACCEPT = 2;   // Flags 0x03: 同意
+    REJECT = 3;   // Flags 0x01 (Code=Rejected): 拒绝
+  }
+}
+
+message PairResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// --- 4. SUB1 (订阅) ---
+message SubscribeRequest {
+  Operation op = 1;
+  string publisher_session_id = 2; // 订阅谁（SessionId）
+  
+  // 资源掩码 (对应 ResourceMask)
+  bool sub_video = 3;      // 0x02
+  bool sub_pose = 4;       // 0x01
+  bool sub_audio = 5;      // 扩展
+  
+  enum Operation {
+    SUBSCRIBE = 0;
+    UNSUBSCRIBE = 1;
+  }
+}
+
+message SubscribeResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// --- 5. VPAR (视频参数) ---
+message VideoConfig {
+  CodecType codec = 1;
+  int32 width = 2;
+  int32 height = 3;
+  int32 fps = 4;
+  
+  bytes sps = 5; // H.264 SPS (不含起始码)
+  bytes pps = 6; // H.264 PPS
+  bytes vps = 7; // H.265 VPS
+
+  // 服务端转发用的相关ID：用于接收端回 ACK，以及服务端做超时重发。
+  // 客户端可留空；服务端会在转发时补齐。
+  string config_id = 8;
+  
+  enum CodecType {
+    H264 = 0;
+    H265 = 1;
+  }
+}
+
+message VideoConfigAck {
+  bool success = 1;
+  string message = 2;
+
+  // 对应 VideoConfig.config_id
+  string config_id = 3;
+}
+
+// --- 5A. APAR (音频参数) ---
+message AudioConfig {
+  CodecType codec = 1;
+  int32 sample_rate = 2;
+  int32 channels = 3;
+  int32 frame_duration_ms = 4;
+  int32 samples_per_channel = 5;
+  int32 bitrate_bps = 6;
+  bool opus_inband_fec_enabled = 7;
+  bool opus_dtx_enabled = 8;
+  string config_id = 9;
+
+  enum CodecType {
+    OPUS = 0;
+  }
+}
+
+message AudioConfigAck {
+  bool success = 1;
+  string message = 2;
+  string config_id = 3;
+}
+
+// --- 9. P2P 信息下发（客户端主动拉取） ---
+message GetP2pInfoResponse {
+  // 未就绪时仅返回 ready=false
+  bool ready = 1;
+
+  // 对端信息（ready=true 时有效）
+  string peer_session_id = 2;
+  string peer_public_ip = 3;
+  int32 peer_public_port = 4;
+
+  // 共享密钥（ready=true 时有效）
+  bytes shared_key = 5;
+}
+
+// --- 6. START/STOP (控制 - 带资源类型) ---
+message ControlCommand {
+  CommandType type = 1;
+  ResourceType resource = 2; // [新增] 控制哪个资源 (Video/Pose)
+  
+  enum CommandType {
+    STOP = 0;
+    START = 1;
+    FORCE_KEYFRAME = 2;
+  }
+  
+  enum ResourceType {
+    ALL = 0;
+    VIDEO = 1; // 对应 Category=1
+    POSE = 2;  // 对应 Category=2
+  }
+}
+
+// 信令服务定义
+service Signaling {
+  // 独立 RPC，便于按功能路由
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  rpc Pair (PairRequest) returns (PairResponse);
+  rpc Subscribe (SubscribeRequest) returns (SubscribeResponse);
+  rpc ListUnpaired (ListUnpairedRequest) returns (ListUnpairedResponse);
+  rpc Ping (Heartbeat) returns (HeartbeatAck);
+
+  // P2P 信息拉取：调用方 sessionId 从 metadata/header 的 session-id 解析。
+  rpc GetP2pInfo (google.protobuf.Empty) returns (GetP2pInfoResponse);
+
+  // 客户端上报视频参数（SPS/PPS/FPS 等）；服务端转发给配对端与订阅了该发布者的端。
+  // sender sessionId 从 metadata/header 的 session-id 解析。
+  rpc PublishVideoConfig (VideoConfig) returns (VideoConfigAck);
+
+  // 接收端对 EventMessage.video_config 回 ACK。
+  // sender sessionId 从 metadata/header 的 session-id 解析。
+  rpc AckVideoConfig (VideoConfigAck) returns (google.protobuf.Empty);
+
+  // 客户端上报音频参数（采样率/声道/帧长/码率等）；服务端转发给配对端与订阅了该发布者的端。
+  // sender sessionId 从 metadata/header 的 session-id 解析。
+  rpc PublishAudioConfig (AudioConfig) returns (AudioConfigAck);
+
+  // 接收端对 EventMessage.audio_config 回 ACK。
+  // sender sessionId 从 metadata/header 的 session-id 解析。
+  rpc AckAudioConfig (AudioConfigAck) returns (google.protobuf.Empty);
+
+  // 事件推送流（机器人端推荐用这个，而不是 WS）：
+  // 客户端发一个订阅请求以绑定 session，服务器通过 server-streaming 推送 EventMessage。
+  rpc EventStream (EventSubscribe) returns (stream EventMessage);
+}
