@@ -29,15 +29,17 @@ namespace GrpcHttp3Demo.Sessions
                     _memory.ForwardingTable.TryRemove(oldEndpoint, out _);
                     _memory.PoseForwardingTable.TryRemove(oldEndpoint, out _);
                     _memory.AudioForwardingTable.TryRemove(oldEndpoint, out _);
+                    _memory.TelemetryLowRateForwardingTable.TryRemove(oldEndpoint, out _);
+                    _memory.TelemetryHighRateForwardingTable.TryRemove(oldEndpoint, out _);
                     _memory.SourceRouteTable.TryRemove(oldEndpoint, out _);
                 }
                 return;
             }
 
             var sourceEndpoint = publisher.UdpEndpoint;
-            var targets = new Dictionary<string, (IPEndPoint endpoint, ForwardEdgeCounter counter, bool video, bool pose, bool audio)>();
+            var targets = new Dictionary<string, (IPEndPoint endpoint, ForwardEdgeCounter counter, bool video, bool pose, bool audio, bool telemetryLowRate, bool telemetryHighRate)>();
 
-            void AddTarget(string targetSessionId, bool wantVideo, bool wantPose, bool wantAudio)
+            void AddTarget(string targetSessionId, bool wantVideo, bool wantPose, bool wantAudio, bool wantTelemetryLowRate, bool wantTelemetryHighRate)
             {
                 if (string.IsNullOrEmpty(targetSessionId)) return;
                 if (!_memory.Sessions.TryGetValue(targetSessionId, out var target) || target.UdpEndpoint == null) return;
@@ -47,17 +49,17 @@ namespace GrpcHttp3Demo.Sessions
 
                 if (targets.TryGetValue(targetSessionId, out var existing))
                 {
-                    targets[targetSessionId] = (existing.endpoint, existing.counter, existing.video || wantVideo, existing.pose || wantPose, existing.audio || wantAudio);
+                    targets[targetSessionId] = (existing.endpoint, existing.counter, existing.video || wantVideo, existing.pose || wantPose, existing.audio || wantAudio, existing.telemetryLowRate || wantTelemetryLowRate, existing.telemetryHighRate || wantTelemetryHighRate);
                     return;
                 }
 
                 var counter = _forwardingMetrics.GetOrCreateEdge(publisherSessionId, targetSessionId);
-                targets[targetSessionId] = (endpoint, counter, wantVideo, wantPose, wantAudio);
+                targets[targetSessionId] = (endpoint, counter, wantVideo, wantPose, wantAudio, wantTelemetryLowRate, wantTelemetryHighRate);
             }
 
             if (_memory.Pairings.TryGetValue(publisherSessionId, out var pairedSessionId))
             {
-                AddTarget(pairedSessionId, wantVideo: true, wantPose: true, wantAudio: true);
+                AddTarget(pairedSessionId, wantVideo: true, wantPose: true, wantAudio: true, wantTelemetryLowRate: true, wantTelemetryHighRate: true);
             }
 
             if (_memory.SubscriptionMeta.TryGetValue(publisherSessionId, out var subscriptions))
@@ -65,7 +67,7 @@ namespace GrpcHttp3Demo.Sessions
                 foreach (var item in subscriptions)
                 {
                     var meta = item.Value;
-                    AddTarget(item.Key, wantVideo: meta.SubVideo, wantPose: meta.SubPose, wantAudio: meta.SubAudio);
+                    AddTarget(item.Key, wantVideo: meta.SubVideo, wantPose: meta.SubPose, wantAudio: meta.SubAudio, wantTelemetryLowRate: meta.SubTelemetryLowRate, wantTelemetryHighRate: meta.SubTelemetryHighRate);
                 }
             }
 
@@ -75,32 +77,40 @@ namespace GrpcHttp3Demo.Sessions
                 {
                     if (session.UdpEndpoint == null) continue;
                     if (session.SessionId == publisherSessionId) continue;
-                    AddTarget(session.SessionId, wantVideo: true, wantPose: true, wantAudio: true);
+                    AddTarget(session.SessionId, wantVideo: true, wantPose: true, wantAudio: true, wantTelemetryLowRate: true, wantTelemetryHighRate: true);
                 }
             }
 
             var video = new List<UdpForwardTarget>(targets.Count);
             var pose = new List<UdpForwardTarget>(targets.Count);
             var audio = new List<UdpForwardTarget>(targets.Count);
+            var telemetryLowRate = new List<UdpForwardTarget>(targets.Count);
+            var telemetryHighRate = new List<UdpForwardTarget>(targets.Count);
 
             foreach (var item in targets)
             {
                 var targetSessionId = item.Key;
-                var (endpoint, counter, wantVideo, wantPose, wantAudio) = item.Value;
+                var (endpoint, counter, wantVideo, wantPose, wantAudio, wantTelemetryLowRate, wantTelemetryHighRate) = item.Value;
 
                 if (wantVideo) video.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
                 if (wantPose) pose.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
                 if (wantAudio) audio.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
+                if (wantTelemetryLowRate) telemetryLowRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
+                if (wantTelemetryHighRate) telemetryHighRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
             }
 
             var videoTargets = video.ToImmutableArray();
             var poseTargets = pose.ToImmutableArray();
             var audioTargets = audio.ToImmutableArray();
+            var telemetryLowRateTargets = telemetryLowRate.ToImmutableArray();
+            var telemetryHighRateTargets = telemetryHighRate.ToImmutableArray();
 
             _memory.ForwardingTable[sourceEndpoint] = videoTargets;
             _memory.PoseForwardingTable[sourceEndpoint] = poseTargets;
             _memory.AudioForwardingTable[sourceEndpoint] = audioTargets;
-            _memory.SourceRouteTable[sourceEndpoint] = new UdpSourceRoute(publisherSessionId, sourceEndpoint, videoTargets, poseTargets, audioTargets);
+            _memory.TelemetryLowRateForwardingTable[sourceEndpoint] = telemetryLowRateTargets;
+            _memory.TelemetryHighRateForwardingTable[sourceEndpoint] = telemetryHighRateTargets;
+            _memory.SourceRouteTable[sourceEndpoint] = new UdpSourceRoute(publisherSessionId, sourceEndpoint, videoTargets, poseTargets, audioTargets, telemetryLowRateTargets, telemetryHighRateTargets);
         }
 
         public void RebuildForwardingForSubscriber(string subscriberSessionId)

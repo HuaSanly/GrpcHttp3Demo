@@ -63,6 +63,11 @@ namespace GrpcHttp3Demo.Sessions
 
         public void UnregisterGrpc(string sessionId)
         {
+            var affectedPublishers = _memory.SubscriptionMeta
+                .Where(item => item.Value.ContainsKey(sessionId))
+                .Select(item => item.Key)
+                .ToArray();
+
             if (!_memory.Sessions.TryRemove(sessionId, out var context))
             {
                 return;
@@ -83,6 +88,8 @@ namespace GrpcHttp3Demo.Sessions
                 _memory.ForwardingTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.PoseForwardingTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.AudioForwardingTable.TryRemove(context.UdpEndpoint, out _);
+                _memory.TelemetryLowRateForwardingTable.TryRemove(context.UdpEndpoint, out _);
+                _memory.TelemetryHighRateForwardingTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.SourceRouteTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.FeedbackRoute.TryRemove(context.UdpEndpoint, out _);
             }
@@ -90,13 +97,26 @@ namespace GrpcHttp3Demo.Sessions
             _memory.SessionEndpointIndex.TryRemove(sessionId, out _);
             _memory.SubscriptionDetails.TryRemove(sessionId, out _);
 
-            foreach (var details in _memory.SubscriptionDetails.Values)
+            foreach (var publisherSessionId in affectedPublishers)
             {
-                details.TryRemove(sessionId, out _);
+                if (_memory.SubscriptionDetails.TryGetValue(publisherSessionId, out var details))
+                {
+                    details.TryRemove(sessionId, out _);
+                }
+
+                if (_memory.SubscriptionMeta.TryGetValue(publisherSessionId, out var meta))
+                {
+                    meta.TryRemove(sessionId, out _);
+                }
             }
 
             _memory.SubscriptionMeta.TryRemove(sessionId, out _);
-            _routing.RebuildForwardingForSubscriber(sessionId);
+
+            foreach (var publisherSessionId in affectedPublishers)
+            {
+                _routing.RebuildForwardingForPublisher(publisherSessionId);
+            }
+
             _subscriptions.RebuildSystemMonitorTargets();
 
             Console.WriteLine($"[SessionRegistry] Unregistered session: {sessionId}");

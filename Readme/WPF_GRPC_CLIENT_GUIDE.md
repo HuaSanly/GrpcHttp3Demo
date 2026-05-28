@@ -247,7 +247,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "subscriberSessionId": "client-session-id",
-  "topics": ["udp_global", "signaling_rates"],
+  "topics": ["udp_global", "signaling_rates", "online_summary", "runtime_tables"],
   "intervalMs": 1000
 }
 ```
@@ -263,6 +263,8 @@ Authorization: Bearer <accessToken>
 
 - `udp_global`：UDP 全局 rx/tx/txOk/txFail/retry/drop 快照。
 - `signaling_rates`：gRPC/WS 信令收发速率和累计值。
+- `online_summary`：服务端视角的注册数、在线数、按角色在线数、推送通道连通数。
+- `runtime_tables`：后端运行时会话表、配对表、转发表、反馈路由等内部表数量快照。
 
 成功响应：
 
@@ -274,7 +276,7 @@ Authorization: Bearer <accessToken>
   "subscriberSessionId": "client-session-id",
   "udpEndpoint": "192.168.1.20:52000",
   "prefix": "0x07",
-  "topics": ["udp_global", "signaling_rates"],
+  "topics": ["udp_global", "signaling_rates", "online_summary", "runtime_tables"],
   "effectiveIntervalMs": 1000
 }
 ```
@@ -306,6 +308,8 @@ JSON envelope 字段：
 - `topics`：本包携带的 topic 名称。
 - `udp`：订阅 `udp_global` 时出现。
 - `signaling`：订阅 `signaling_rates` 时出现。
+- `online`：订阅 `online_summary` 时出现。
+- `runtimeTables`：订阅 `runtime_tables` 时出现。
 
 接收示例：
 

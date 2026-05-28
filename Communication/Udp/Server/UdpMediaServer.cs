@@ -23,6 +23,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private readonly UdpSessionBindingService _udpBindings;
         private readonly UdpMetricsService _metrics;
         private readonly SignalingMetricsService _signalingMetrics;
+        private readonly SessionPresence _presence;
+        private readonly SessionLivenessOptions _livenessOptions;
         private readonly ILogger<UdpMediaServer> _logger;
         private readonly int _port;
         private readonly int _receiveDatagramBufferBytes;
@@ -40,12 +42,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private const long DataActivityUpdateIntervalMs = 1000;
         private const long DackIntervalMs = 5000;
 
-        public UdpMediaServer(SessionMemoryStore memory, UdpSessionBindingService udpBindings, UdpMetricsService metrics, SignalingMetricsService signalingMetrics, ILogger<UdpMediaServer> logger, IConfiguration configuration)
+        public UdpMediaServer(SessionMemoryStore memory, UdpSessionBindingService udpBindings, UdpMetricsService metrics, SignalingMetricsService signalingMetrics, SessionPresence presence, SessionLivenessOptions livenessOptions, ILogger<UdpMediaServer> logger, IConfiguration configuration)
         {
             _memory = memory;
             _udpBindings = udpBindings;
             _metrics = metrics;
             _signalingMetrics = signalingMetrics;
+            _presence = presence;
+            _livenessOptions = livenessOptions;
             _logger = logger;
             _port = configuration.GetValue<int>("MediaServer:UdpPort", 7778);
             _forwardingOptions = configuration.GetSection("MediaServer:UdpForwarding").Get<UdpForwardingOptions>() ?? new UdpForwardingOptions();
@@ -134,12 +138,24 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 {
                     var now = Environment.TickCount64;
                     var targets = _memory.SystemMonitorTargets;
+                    object? udpSnapshot = null;
+                    object? signalingSnapshot = null;
+                    object? onlineSnapshot = null;
+                    object? runtimeTablesSnapshot = null;
+                    Dictionary<SystemMonitorTopicMask, string[]>? topicNamesCache = null;
+
                     for (var i = 0; i < targets.Length; i++)
                     {
                         var target = targets[i];
                         if (!target.TryMarkDue(now)) continue;
 
-                        var payload = BuildSystemMonitorPayload(target);
+                        var payload = BuildSystemMonitorPayload(
+                            target,
+                            ref udpSnapshot,
+                            ref signalingSnapshot,
+                            ref onlineSnapshot,
+                            ref runtimeTablesSnapshot,
+                            ref topicNamesCache);
                         SendSystemMonitor(target.Endpoint, payload);
                     }
                 }
@@ -152,9 +168,41 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             }
         }
 
-        private byte[] BuildSystemMonitorPayload(UdpSystemMonitorTarget target)
+        private byte[] BuildSystemMonitorPayload(
+            UdpSystemMonitorTarget target,
+            ref object? udpSnapshot,
+            ref object? signalingSnapshot,
+            ref object? onlineSnapshot,
+            ref object? runtimeTablesSnapshot,
+            ref Dictionary<SystemMonitorTopicMask, string[]>? topicNamesCache)
         {
-            var topics = SessionSubscription.ToTopicNames(target.Topics);
+            topicNamesCache ??= new Dictionary<SystemMonitorTopicMask, string[]>();
+            if (!topicNamesCache.TryGetValue(target.Topics, out var topics))
+            {
+                topics = SessionSubscription.ToTopicNames(target.Topics);
+                topicNamesCache[target.Topics] = topics;
+            }
+
+            if ((target.Topics & SystemMonitorTopicMask.UdpGlobal) != 0 && udpSnapshot == null)
+            {
+                udpSnapshot = _metrics.Snapshot();
+            }
+
+            if ((target.Topics & SystemMonitorTopicMask.SignalingRates) != 0 && signalingSnapshot == null)
+            {
+                signalingSnapshot = _signalingMetrics.Snapshot();
+            }
+
+            if ((target.Topics & SystemMonitorTopicMask.OnlineSummary) != 0 && onlineSnapshot == null)
+            {
+                onlineSnapshot = _presence.GetOnlineRoleSnapshot(_livenessOptions.Timeout);
+            }
+
+            if ((target.Topics & SystemMonitorTopicMask.RuntimeTables) != 0 && runtimeTablesSnapshot == null)
+            {
+                runtimeTablesSnapshot = _memory.Snapshot();
+            }
+
             var envelope = new
             {
                 sequence = target.NextSequence(),
@@ -163,8 +211,10 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 targetSessionId = target.SessionId,
                 prefix = "0x07",
                 topics,
-                udp = (target.Topics & SystemMonitorTopicMask.UdpGlobal) != 0 ? _metrics.Snapshot() : null,
-                signaling = (target.Topics & SystemMonitorTopicMask.SignalingRates) != 0 ? _signalingMetrics.Snapshot() : null
+                udp = (target.Topics & SystemMonitorTopicMask.UdpGlobal) != 0 ? udpSnapshot : null,
+                signaling = (target.Topics & SystemMonitorTopicMask.SignalingRates) != 0 ? signalingSnapshot : null,
+                online = (target.Topics & SystemMonitorTopicMask.OnlineSummary) != 0 ? onlineSnapshot : null,
+                runtimeTables = (target.Topics & SystemMonitorTopicMask.RuntimeTables) != 0 ? runtimeTablesSnapshot : null
             };
 
             var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(envelope);
@@ -277,6 +327,40 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                         {
                             var dest = targets[i];
                             dest.Counter.RecordAudio(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                        }
+
+                        continue;
+                    }
+
+                    // 7. Robot telemetry low rate (0x05): forward using prebuilt ep -> telemetry low-rate targets
+                    if (prefix == 0x05)
+                    {
+                        RecordDataActivityAndMaybeDack(route, remoteEp);
+
+                        var targets = route.TelemetryLowRateTargets;
+                        byte[]? queuedPayload = null;
+                        for (var i = 0; i < targets.Length; i++)
+                        {
+                            var dest = targets[i];
+                            dest.Counter.RecordTelemetry(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                        }
+
+                        continue;
+                    }
+
+                    // 8. Robot telemetry high rate (0x06): forward using prebuilt ep -> telemetry high-rate targets
+                    if (prefix == 0x06)
+                    {
+                        RecordDataActivityAndMaybeDack(route, remoteEp);
+
+                        var targets = route.TelemetryHighRateTargets;
+                        byte[]? queuedPayload = null;
+                        for (var i = 0; i < targets.Length; i++)
+                        {
+                            var dest = targets[i];
+                            dest.Counter.RecordTelemetry(length);
                             SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
                         }
 

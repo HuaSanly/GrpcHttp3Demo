@@ -1,4 +1,5 @@
 using GrpcHttp3Demo.Utils;
+using GrpcHttp3Demo.Sessions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GrpcHttp3Demo.Controllers.System
@@ -7,13 +8,15 @@ namespace GrpcHttp3Demo.Controllers.System
     [Route("api/system")]
     public class SystemConfigController : ControllerBase
     {
-        private readonly IConfiguration _configuration;
         private readonly IHostEnvironment _environment;
+        private readonly IConfiguration _configuration;
+        private readonly SessionLivenessOptions _livenessOptions;
 
-        public SystemConfigController(IConfiguration configuration, IHostEnvironment environment)
+        public SystemConfigController(IConfiguration configuration, IHostEnvironment environment, SessionLivenessOptions livenessOptions)
         {
             _configuration = configuration;
             _environment = environment;
+            _livenessOptions = livenessOptions;
         }
 
         [HttpGet("config")]
@@ -24,8 +27,6 @@ namespace GrpcHttp3Demo.Controllers.System
             var udpControlTimeoutSeconds = _configuration.GetValue<int>("MediaServer:UdpControlTimeoutSeconds", 15);
             var udpRescueCooldownSeconds = _configuration.GetValue<int>("MediaServer:UdpRescueCooldownSeconds", 10);
             var udpMaxRescues = _configuration.GetValue<int>("MediaServer:UdpMaxRescues", 3);
-
-            var sessionTimeoutSeconds = 30;
 
             // 配置值（仅用于展示；实际生效值由 AppConfig 做环境约束）
             bool? broadcastConfigured = null;
@@ -50,7 +51,9 @@ namespace GrpcHttp3Demo.Controllers.System
                 },
                 session = new
                 {
-                    timeoutSeconds = Math.Max(1, sessionTimeoutSeconds)
+                    heartbeatIntervalSeconds = _livenessOptions.HeartbeatIntervalSeconds,
+                    timeoutSeconds = _livenessOptions.TimeoutSeconds,
+                    cleanupCheckIntervalMs = _livenessOptions.CleanupCheckIntervalMs
                 },
                 mediaServer = new
                 {

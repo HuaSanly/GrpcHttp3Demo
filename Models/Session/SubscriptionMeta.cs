@@ -7,6 +7,8 @@ namespace GrpcHttp3Demo.Models.Session
         public bool SubVideo { get; set; }
         public bool SubPose { get; set; }
         public bool SubAudio { get; set; }
+        public bool SubTelemetryLowRate { get; set; }
+        public bool SubTelemetryHighRate { get; set; }
         public SystemMonitorTopicMask SystemMonitorTopics { get; set; }
         public int SystemMonitorIntervalMs { get; set; } = 1000;
         public byte[]? Sps { get; set; }

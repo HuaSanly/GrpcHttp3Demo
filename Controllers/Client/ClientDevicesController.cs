@@ -11,11 +11,13 @@ namespace GrpcHttp3Demo.Controllers.Client
     {
         private readonly SessionQueries _sessions;
         private readonly ClientAuthService _authService;
+        private readonly SessionLivenessOptions _livenessOptions;
 
-        public ClientDevicesController(SessionQueries sessions, ClientAuthService authService)
+        public ClientDevicesController(SessionQueries sessions, ClientAuthService authService, SessionLivenessOptions livenessOptions)
         {
             _sessions = sessions;
             _authService = authService;
+            _livenessOptions = livenessOptions;
         }
 
         [HttpGet("robots")]
@@ -43,7 +45,7 @@ namespace GrpcHttp3Demo.Controllers.Client
                 return Unauthorized(new { message = "Missing or invalid bearer token" });
             }
 
-            var onlineTimeout = TimeSpan.FromSeconds(30);
+            var onlineTimeout = _livenessOptions.Timeout;
             var items = _sessions.ListSessions(onlineTimeout, role, onlineOnly);
 
             return Ok(new

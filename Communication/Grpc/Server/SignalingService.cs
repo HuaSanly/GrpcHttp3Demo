@@ -14,15 +14,17 @@ namespace GrpcHttp3Demo.Communication.Grpc.Server
         private readonly SessionRegistry _sessions;
         private readonly PushChannelRegistry _pushChannels;
         private readonly SignalingAppService _appService;
+        private readonly SessionPresence _presence;
         private readonly SignalingMetricsService _metrics;
         private readonly ILogger<SignalingService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public SignalingService(SessionRegistry sessions, PushChannelRegistry pushChannels, SignalingAppService appService, SignalingMetricsService metrics, ILogger<SignalingService> logger, IHttpContextAccessor httpContextAccessor)
+        public SignalingService(SessionRegistry sessions, PushChannelRegistry pushChannels, SignalingAppService appService, SessionPresence presence, SignalingMetricsService metrics, ILogger<SignalingService> logger, IHttpContextAccessor httpContextAccessor)
         {
             _sessions = sessions;
             _pushChannels = pushChannels;
             _appService = appService;
+            _presence = presence;
             _metrics = metrics;
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
@@ -169,6 +171,7 @@ namespace GrpcHttp3Demo.Communication.Grpc.Server
 
             var sender = new GrpcEventStreamSender(responseStream, _metrics);
             _pushChannels.Attach(sessionId, sender);
+            _presence.MarkTransportConnected(sessionId);
             _logger.LogInformation($"[EventStream] Attached gRPC event stream sender: {sessionId}");
 
             try
@@ -181,6 +184,7 @@ namespace GrpcHttp3Demo.Communication.Grpc.Server
             }
             finally
             {
+                _presence.MarkTransportDisconnected(sessionId, "grpc_event_stream_closed");
                 _pushChannels.Detach(sessionId, sender);
                 _logger.LogInformation($"[EventStream] Detached gRPC event stream sender: {sessionId}");
             }

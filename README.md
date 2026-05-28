@@ -1,133 +1,200 @@
-# Robot-VR Streaming Server
+# GrpcHttp3Demo
 
-This project implements a low-latency video streaming server for Robot-to-VR teleoperation.
+机器人到 VR 的控制面与 UDP 转发服务。
 
-## Architecture
+## 运行
 
-- **Control Plane**: gRPC over HTTP/2 (TCP) or HTTP/3 (QUIC).
-  - Handles device registration, session management, and control commands.
-  - Defined in `Protos/signaling.proto`.
-- **Data Plane**: Pure UDP.
-  - Handles high-bandwidth video data.
-  - Implements a custom SFU (Selective Forwarding Unit) in `UdpMediaServer.cs`.
-- **Flow Control**: SCReAM (Self-Clocked Rate Adaptation for Multimedia).
-  - Implemented in `Services/Scream/`.
-  - Regulates video bitrate based on network congestion.
+要求：.NET 10 SDK。
 
-## Prerequisites
-
-- .NET 10.0 SDK
-- Visual Studio 2022 or VS Code
-
-## Running the Server
+在仓库根目录执行：
 
 ```bash
 dotnet run
 ```
 
-The server listens on:
-- **TCP 7776**: gRPC (HTTP/2, cleartext)
-- **TCP 7777**: gRPC (HTTPS, HTTP/1.1 + HTTP/2)
+默认端口：
 
-### Deploying to two servers with two certificates
+- TCP 7777：统一信令入口，承载 gRPC、HTTP Controller、Swagger UI、WebSocket
+- UDP 7778：媒体与 UDP 控制面
 
-This repo includes two example environment overrides:
-- `appsettings.ServerA.json` -> `Configs/Certificate/grpc-dev.eifuture.com.pfx`
-- `appsettings.ServerB.json` -> `Configs/Certificate/grpc-pro.eifuture.com.pfx`
+## 接口文档界面
 
-On each server, set `ASPNETCORE_ENVIRONMENT` to pick which certificate is used (this controls `appsettings.{Environment}.json` loading):
+当前项目已接入 OpenAPI + Scalar，并保留 Swagger UI 作为兼容调试入口。
+
+- 默认入口：`https://<host>:7777/scalar`
+- 兼容入口：`https://<host>:7777/swagger`
+- 根路径 `/` 会自动跳转到默认文档界面
+- OpenAPI JSON：`https://<host>:7777/swagger/v1/swagger.json`
+
+说明：
+
+- 当前所有信令接口都统一走 7777，包括 gRPC、HTTP Controller 和 WebSocket
+- Scalar 和 Swagger UI 都走 7777
+- 部分接口需要先通过 `POST /api/client/auth/login` 获取 Bearer token，再在 Swagger 右上角 `Authorize` 中填入
+- Scalar 作为默认文档界面，Swagger UI 保留用于兼容旧使用习惯
+
+## 关键文档
+
+- [Readme/PROTOCOL_GRPC_SIGNALING.md](Readme/PROTOCOL_GRPC_SIGNALING.md)
+- [Readme/PROTOCOL_UDP_SIGNALING.md](Readme/PROTOCOL_UDP_SIGNALING.md)
+- [Readme/WPF_GRPC_CLIENT_GUIDE.md](Readme/WPF_GRPC_CLIENT_GUIDE.md)
+
+## PostgreSQL
+
+当前服务器：Ubuntu 24.04，PostgreSQL 16，服务状态已确认是 `active`。
+
+后端建议使用独立业务库和独立业务账号，不直接使用 `postgres/amgg` 作为应用运行账号。
+
+当前已配置：
+
+- 已创建 PostgreSQL 管理角色 `amgg`
+- `amgg` 具备 PostgreSQL 超级用户权限
+- 本机 shell 以 Linux 用户 `amgg` 登录后，可直接通过本地 socket 使用 peer 认证连接数据库
+
+注意：这里配置的是 PostgreSQL 管理权限，不是 Linux 系统 `root` 权限。
+
+### 第一次本机连接
+
+在 Ubuntu 服务器上直接执行：
 
 ```bash
-# Server A
-set ASPNETCORE_ENVIRONMENT=ServerA
-dotnet run --no-launch-profile
-
-# Server B
-set ASPNETCORE_ENVIRONMENT=ServerB
-dotnet run --no-launch-profile
+psql -U amgg -d postgres
 ```
 
-Alternatively, you can use the included launch profiles:
+如果只是确认当前登录身份：
 
 ```bash
-dotnet run --launch-profile ServerA
-dotnet run --launch-profile ServerB
+psql -U amgg -d postgres -Atc "SELECT current_user, session_user;"
 ```
 
-Both servers can listen on `7777` as long as they are on different machines (or different network namespaces/containers). On the same Windows machine, you cannot bind two processes to the same `7777`.
+### 当前认证状态
 
-### Broadcast mode
+当前已完成局域网直连配置：
 
-`DevSettings:BroadcastToAll=true` enables a debug broadcast mode that forwards to all UDP-registered sessions.
+- PostgreSQL 监听 `127.0.0.1:5432` 和 `192.168.3.55:5432`
+- `ufw` 仅放行 `192.168.3.0/24` 到 `5432/tcp`
+- `pg_hba.conf` 仅允许局域网中的 `amgg` 使用 `scram-sha-256` 登录
 
-- In `Development` environment: `BroadcastToAll` can be enabled directly.
-- In non-`Development` environments: you must also set `DevSettings:AllowBroadcastInNonDevelopment=true`.
+当前 `pg_hba.conf` 关键规则如下：
 
-## Protocol
+- `local all all peer`
+- `host all amgg 192.168.3.0/24 scram-sha-256`
+- `host all all 127.0.0.1/32 scram-sha-256`
+- `host all all ::1/128 scram-sha-256`
 
-### 1. Signaling (gRPC)
-- **Robot** calls `Register(ClientInfo)` with `type = ROBOT`.
-- **VR** calls `Register(ClientInfo)` with `type = VR`.
-- **WPF / Website companion client** calls `Register(ClientInfo)` with `type = CLIENT`.
-- **VR** calls `StartStream(StreamRequest)` to request video from a Robot.
-- **VR** calls `RobotCmd(Command)` to send control commands to the Robot.
+这意味着：
 
-#### gRPC Session Header (Required)
+- 在 Ubuntu 本机，以系统用户 `amgg` 登录后，可以无密码连接 PostgreSQL
+- 从其它机器直接连 PostgreSQL，当前只允许 `192.168.3.0/24` 网段访问，且必须先给 `amgg` 设置数据库密码
 
-Full gRPC signaling details: `Readme/PROTOCOL_GRPC_SIGNALING.md`.
+### 后端配置
 
-After `Register`, the server returns a unique `SessionId`.
+`ServerA` 环境下，后端数据库连接配置写在 [appsettings.ServerA.json](appsettings.ServerA.json)。当前已预置为：
 
-For **all subsequent gRPC calls** (including `Ping`, `Pair`, `Subscribe`, `ListUnpaired`, and `EventStream`), the client must attach this value as a gRPC metadata/header:
-
-- Header key: `session-id`
-- Header value: the `SessionId` returned by `Register`
-
-If the header is missing, the server cannot associate the call with a session, heartbeats will not refresh `LastHeartbeatUtc`, and the session may be cleaned up as timed out.
-
-**grpc-dotnet C# example:**
-
-```csharp
-using Grpc.Core;
-
-// 1) Register
-var reg = await client.RegisterAsync(new RegisterRequest { /* ... */ });
-var sessionId = reg.SessionId;
-
-// 2) Prepare metadata once
-var headers = new Metadata { { "session-id", sessionId } };
-
-// 3) Ping (gRPC heartbeat)
-await client.PingAsync(new Heartbeat { ClientTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }, headers);
-
-// 4) Other unary calls
-await client.PairAsync(new PairRequest { /* ... */ }, headers);
-await client.SubscribeAsync(new SubscribeRequest { /* ... */ }, headers);
-
-// 5) Server-streaming
-using var call = client.EventStream(new EventSubscribe { SessionId = sessionId }, headers);
-await foreach (var evt in call.ResponseStream.ReadAllAsync()) { /* ... */ }
+```json
+"Postgres": {
+	"Enabled": true,
+	"Host": "192.168.3.55",
+	"Port": 5432,
+	"Database": "grpc_http3_demo",
+	"Username": "grpc_http3_app",
+	"Password": "REPLACE_WITH_REAL_DB_PASSWORD",
+	"SslMode": "Disable",
+	"TimeoutSeconds": 5
+}
 ```
 
-### 2. Media (UDP)
-- **Handshake**: Send `HELLO|<session_id>` to UDP port 5002.
-- **Video Data**: Send RTP packets.
-- **Feedback**: Server sends RTCP-like feedback for SCReAM.
+说明：
 
-### 3. Client and Monitoring
+- `Database` 和 `Username` 对应建议创建的业务数据库与业务账号
+- `Password` 现在是占位符，替换成真实数据库密码后再启动服务
+- 当前代码已经接入 PostgreSQL 连接测试，不会自动迁移或建表
 
-Client setup and monitoring subscription guide: `Readme/WPF_GRPC_CLIENT_GUIDE.md`.
+### 真实连接测试
 
-- UDP polling: `/api/monitor/udp/stats`
-- UDP push: `POST /api/client/monitor/subscriptions` + UDP datagrams with prefix `0x07`
-- System: `/api/monitor/system/stats`
-- Config: `/api/system/config`
+当前后端新增了一个受 admin token 保护的数据库测试接口：
 
-## Project Structure
+- `POST /api/system/database/test`
 
-- `Protos/`: gRPC definitions.
-- `Services/`:
-  - `SignalingService.cs`: gRPC implementation.
-  - `ConnectionManager.cs`: State management.
-  - `Media/UdpMediaServer.cs`: UDP listener and packet forwarder.
-  - `Scream/`: Congestion control logic.
+使用流程：
+
+1. 先调用 `POST /api/client/auth/login` 获取 admin bearer token
+2. 带上 `Authorization: Bearer <token>` 调用 `POST /api/system/database/test`
+
+返回成功时，会给出当前连接到的主机、端口、数据库、数据库用户和服务器版本。
+
+### 如果要从 Windows 首次连接
+
+有两种方式：
+
+1. 先 SSH 到 Ubuntu，再在服务器本机执行 `psql -U amgg -d postgres`
+2. 用 SSH 隧道把远端 `5432` 转到本机，再用数据库工具连接
+
+SSH 隧道示例：
+
+```bash
+ssh -L 5432:127.0.0.1:5432 amgg@192.168.3.55
+```
+
+然后本机数据库工具连：
+
+- Host: `127.0.0.1`
+- Port: `5432`
+- Database: `postgres`
+- User: `amgg`
+- Password: `amgg` 的 PostgreSQL 数据库密码
+
+如果走 TCP 连接，还需要先为 `amgg` 设置数据库密码。设置完成后，可直接连接：
+
+- Host: `192.168.3.55`
+- Port: `5432`
+- Database: `postgres`
+- User: `amgg`
+- Password: `amgg` 的 PostgreSQL 数据库密码
+
+注意：
+
+- SSH 登录 Ubuntu 用的是 Linux 账户 `amgg` 的密码或密钥
+- 连接 PostgreSQL 用的是数据库角色 `amgg` 的密码
+- 只有在 Ubuntu 本机以系统用户 `amgg` 通过 Unix socket 连接时，才可以依赖 `peer` 认证不输数据库密码
+
+### 常用管理命令
+
+查看服务状态：
+
+```bash
+systemctl status postgresql
+```
+
+切到 PostgreSQL 系统用户：
+
+```bash
+sudo -u postgres psql
+```
+
+查看角色：
+
+```bash
+sudo -u postgres psql -Atc "SELECT rolname, rolsuper FROM pg_roles ORDER BY rolname;"
+```
+
+创建业务数据库与业务用户的示例 SQL：
+
+```sql
+CREATE ROLE grpc_http3_app
+WITH LOGIN PASSWORD 'REPLACE_WITH_REAL_DB_PASSWORD'
+NOSUPERUSER CREATEDB NOCREATEROLE INHERIT;
+
+CREATE DATABASE grpc_http3_demo OWNER grpc_http3_app ENCODING 'UTF8';
+REVOKE ALL ON DATABASE grpc_http3_demo FROM PUBLIC;
+GRANT ALL PRIVILEGES ON DATABASE grpc_http3_demo TO grpc_http3_app;
+```
+
+## 监控接口
+
+- `/api/monitor/system/stats`
+- `/api/monitor/sessions`
+- `/api/monitor/udp/stats`
+- `/api/system/config`
+
+UDP 系统监控推送使用前缀 `0x07`，通过 `/api/client/monitor/subscriptions` 管理订阅。

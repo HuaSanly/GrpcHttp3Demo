@@ -1,6 +1,11 @@
 # Build outputs
 bin/
 obj/
+.artifacts/
+
+# Local verification outputs
+.verification-server.err.log
+.verification-server.out.log
 
 # IDE and user-specific files
 .vs/

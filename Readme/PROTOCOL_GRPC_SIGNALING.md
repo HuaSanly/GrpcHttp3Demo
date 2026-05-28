@@ -125,7 +125,7 @@ await foreach (var evt in call.ResponseStream.ReadAllAsync())
 1. `Register(role=CLIENT)`
 2. 持续 `Ping`
 3. 建立 `EventStream`
-4. 对目标机器人调用 `Subscribe(publisher_session_id=..., sub_pose/sub_video/sub_audio)`
+4. 对目标机器人调用 `Subscribe(publisher_session_id=..., sub_video/sub_pose/sub_audio/sub_telemetry_low_rate/sub_telemetry_high_rate)`
 
 这类客户端通常不需要：
 - `Pair`

@@ -138,9 +138,11 @@ message SubscribeRequest {
   string publisher_session_id = 2; // 订阅谁（SessionId）
   
   // 资源掩码 (对应 ResourceMask)
-  bool sub_video = 3;      // 0x02
-  bool sub_pose = 4;       // 0x01
-  bool sub_audio = 5;      // 扩展
+  bool sub_video = 3;                // 0x01
+  bool sub_pose = 4;                 // 0x02
+  bool sub_audio = 5;                // 0x04
+  bool sub_telemetry_low_rate = 6;   // 0x05 机器人低频状态快照
+  bool sub_telemetry_high_rate = 7;  // 0x06 机器人高频遥测预留通道
   
   enum Operation {
     SUBSCRIBE = 0;

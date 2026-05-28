@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using GrpcHttp3Demo.Communication.Grpc.Push;
+using GrpcHttp3Demo.Models.Session;
 using GrpcHttp3Demo.Protos;
 using GrpcHttp3Demo.Storage.Memory.Session;
 
@@ -10,12 +11,16 @@ namespace GrpcHttp3Demo.Sessions
         private readonly SessionMemoryStore _memory;
         private readonly PushChannelRegistry _pushChannels;
         private readonly SessionRegistry _registry;
+        private readonly NotificationService _notifications;
+        private readonly SessionLivenessOptions _options;
 
-        public SessionPresence(SessionMemoryStore memory, PushChannelRegistry pushChannels, SessionRegistry registry)
+        public SessionPresence(SessionMemoryStore memory, PushChannelRegistry pushChannels, SessionRegistry registry, NotificationService notifications, SessionLivenessOptions options)
         {
             _memory = memory;
             _pushChannels = pushChannels;
             _registry = registry;
+            _notifications = notifications;
+            _options = options;
         }
 
         public void UpdateHeartbeat(string sessionId)
@@ -25,6 +30,46 @@ namespace GrpcHttp3Demo.Sessions
                 context.LastHeartbeatUtc = DateTime.UtcNow;
                 context.GrpcRescueCount = 0;
             }
+        }
+
+        public void MarkTransportConnected(string sessionId)
+        {
+            if (_memory.Sessions.TryGetValue(sessionId, out var context))
+            {
+                context.LastTransportConnectedUtc = DateTime.UtcNow;
+                context.LastTransportDisconnectedUtc = DateTime.MinValue;
+                context.LastTransportDisconnectReason = null;
+                context.GrpcRescueCount = 0;
+            }
+        }
+
+        public void MarkTransportDisconnected(string sessionId, string reason)
+        {
+            if (_memory.Sessions.TryGetValue(sessionId, out var context))
+            {
+                if (context.LastTransportDisconnectedUtc == DateTime.MinValue)
+                {
+                    context.LastTransportDisconnectedUtc = DateTime.UtcNow;
+                }
+
+                context.LastTransportDisconnectReason = reason;
+            }
+        }
+
+        public bool IsSessionOnline(string sessionId, DeviceContext context, TimeSpan onlineTimeout, DateTime? now = null)
+        {
+            var current = now ?? DateTime.UtcNow;
+            if (current - context.LastHeartbeatUtc > onlineTimeout)
+            {
+                return false;
+            }
+
+            if (context.LastTransportConnectedUtc == DateTime.MinValue)
+            {
+                return true;
+            }
+
+            return _pushChannels.IsConnected(sessionId);
         }
 
         public object GetOnlineRoleSnapshot(TimeSpan onlineTimeout)
@@ -43,7 +88,7 @@ namespace GrpcHttp3Demo.Sessions
                 totalRegistered++;
                 var context = item.Value;
 
-                if (now - context.LastHeartbeatUtc > onlineTimeout)
+                if (!IsSessionOnline(item.Key, context, onlineTimeout, now))
                 {
                     continue;
                 }
@@ -84,47 +129,75 @@ namespace GrpcHttp3Demo.Sessions
             };
         }
 
-        public void CheckAndRescueSessions(TimeSpan timeout)
+        public async Task CheckAndRescueSessionsAsync()
         {
             var now = DateTime.UtcNow;
-            var lostSessions = new List<string>();
+            var lostSessions = new List<(string SessionId, string Reason)>();
 
             foreach (var item in _memory.Sessions)
             {
+                var sessionId = item.Key;
                 var context = item.Value;
-                if (now - context.LastHeartbeatUtc <= timeout) continue;
+                var heartbeatHealthy = now - context.LastHeartbeatUtc <= _options.Timeout;
+                var pushConnected = _pushChannels.IsConnected(sessionId);
+                var transportObserved = context.LastTransportConnectedUtc != DateTime.MinValue;
 
-                if (_pushChannels.IsConnected(item.Key))
+                if (pushConnected)
                 {
-                    if (context.GrpcRescueCount < 3)
+                    if (context.LastTransportDisconnectedUtc != DateTime.MinValue)
                     {
-                        context.GrpcRescueCount++;
-                        Console.WriteLine($"[SessionPresence] Rescuing session {item.Key} (Attempt {context.GrpcRescueCount}) via push channel...");
+                        context.LastTransportDisconnectedUtc = DateTime.MinValue;
+                        context.LastTransportDisconnectReason = null;
+                    }
 
-                        var command = new EventMessage
-                        {
-                            TargetSessionId = item.Key,
-                            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                            System = new SystemCommand { Action = SystemCommand.Types.Action.RequestPing }
-                        };
-                        _ = _pushChannels.SendEventAsync(item.Key, command);
-                    }
-                    else
+                    if (!heartbeatHealthy)
                     {
-                        lostSessions.Add(item.Key);
+                        lostSessions.Add((sessionId, "heartbeat_timeout"));
                     }
+
+                    continue;
                 }
-                else
+
+                if (!transportObserved)
                 {
-                    lostSessions.Add(item.Key);
+                    if (!heartbeatHealthy)
+                    {
+                        lostSessions.Add((sessionId, "heartbeat_timeout"));
+                    }
+
+                    continue;
                 }
+
+                if (context.LastTransportDisconnectedUtc == DateTime.MinValue)
+                {
+                    context.LastTransportDisconnectedUtc = now;
+                    context.LastTransportDisconnectReason ??= "transport_disconnected";
+                    continue;
+                }
+
+                if (now - context.LastTransportDisconnectedUtc <= _options.Timeout)
+                {
+                    continue;
+                }
+
+                lostSessions.Add((sessionId, context.LastTransportDisconnectReason ?? "transport_timeout"));
             }
 
-            foreach (var sessionId in lostSessions)
+            foreach (var lost in lostSessions)
             {
-                Console.WriteLine($"[SessionPresence] Session timed out: {sessionId}");
-                _registry.UnregisterGrpc(sessionId);
+                await TerminateSessionAsync(lost.SessionId, lost.Reason);
             }
+        }
+
+        private async Task TerminateSessionAsync(string sessionId, string reason)
+        {
+            if (_memory.Pairings.TryGetValue(sessionId, out var partnerSessionId) && !string.IsNullOrEmpty(partnerSessionId))
+            {
+                await _notifications.SendUnpairAsync(sessionId, partnerSessionId);
+            }
+
+            Console.WriteLine($"[SessionPresence] Session terminated: {sessionId}, reason={reason}");
+            _registry.UnregisterGrpc(sessionId);
         }
     }
 }

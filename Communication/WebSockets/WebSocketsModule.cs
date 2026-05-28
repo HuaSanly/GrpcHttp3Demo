@@ -30,7 +30,7 @@ namespace GrpcHttp3Demo.Communication.WebSockets
         {
             // VR/Unity 适配通道：client <-> server 双向 WS + Protobuf（二进制）
             // 说明：VR 端不支持 gRPC/HTTP2，则走 /ws/proto 完成控制信令 + 心跳。
-            app.Map("/ws/proto", async (HttpContext context, SessionRegistry sessions, PushChannelRegistry pushChannels, SignalingAppService appService, SignalingMetricsService metrics, ILoggerFactory loggerFactory) =>
+            app.Map("/ws/proto", async (HttpContext context, SessionRegistry sessions, SessionPresence presence, PushChannelRegistry pushChannels, SignalingAppService appService, SignalingMetricsService metrics, ILoggerFactory loggerFactory) =>
             {
                 var logger = loggerFactory.CreateLogger("WebSocketProto");
 
@@ -61,6 +61,7 @@ namespace GrpcHttp3Demo.Communication.WebSockets
                 if (!string.IsNullOrEmpty(currentSessionId))
                 {
                     pushChannels.Attach(currentSessionId, eventSender);
+                    presence.MarkTransportConnected(currentSessionId);
                     logger.LogInformation($"[WS/Proto] Re-attached sender: {currentSessionId}");
                 }
                 else
@@ -210,6 +211,7 @@ namespace GrpcHttp3Demo.Communication.WebSockets
                                 var resp = appService.Register(req, ip, port);
                                 currentSessionId = resp.SessionId;
                                 pushChannels.Attach(currentSessionId, eventSender);
+                                presence.MarkTransportConnected(currentSessionId);
 
                                 await SendEnvelopeAsync(new WsEnvelope
                                 {
@@ -446,6 +448,7 @@ namespace GrpcHttp3Demo.Communication.WebSockets
                 {
                     if (!string.IsNullOrEmpty(currentSessionId))
                     {
+                        presence.MarkTransportDisconnected(currentSessionId, "websocket_disconnected");
                         pushChannels.Detach(currentSessionId, eventSender);
                         logger.LogInformation($"[WS/Proto] Disconnected: {currentSessionId}. EventSender detached.");
                     }

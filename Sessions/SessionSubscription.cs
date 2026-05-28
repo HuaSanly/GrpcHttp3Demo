@@ -18,7 +18,7 @@ namespace GrpcHttp3Demo.Sessions
             _routing = routing;
         }
 
-        public void UpdateSubscription(string publisherSessionId, string subscriberSessionId, bool isSub, bool subVideo, bool subPose, bool subAudio)
+        public void UpdateSubscription(string publisherSessionId, string subscriberSessionId, bool isSub, bool subVideo, bool subPose, bool subAudio, bool subTelemetryLowRate, bool subTelemetryHighRate)
         {
             if (!_memory.Sessions.ContainsKey(publisherSessionId))
             {
@@ -33,7 +33,9 @@ namespace GrpcHttp3Demo.Sessions
                     SubscriberId = subscriberSessionId,
                     SubVideo = subVideo,
                     SubPose = subPose,
-                    SubAudio = subAudio
+                    SubAudio = subAudio,
+                    SubTelemetryLowRate = subTelemetryLowRate,
+                    SubTelemetryHighRate = subTelemetryHighRate
                 };
 
                 var meta = _memory.SubscriptionMeta.GetOrAdd(publisherSessionId, _ => new ConcurrentDictionary<string, SubscriptionMeta>());
@@ -43,11 +45,13 @@ namespace GrpcHttp3Demo.Sessions
                     SubVideo = subVideo,
                     SubPose = subPose,
                     SubAudio = subAudio,
+                    SubTelemetryLowRate = subTelemetryLowRate,
+                    SubTelemetryHighRate = subTelemetryHighRate,
                     LastUpdatedUtc = DateTime.UtcNow
                 };
 
                 _routing.RebuildForwardingForPublisher(publisherSessionId);
-                Console.WriteLine($"[SessionSubscription] {subscriberSessionId} subscribed to {publisherSessionId} (V:{subVideo} P:{subPose} A:{subAudio})");
+                Console.WriteLine($"[SessionSubscription] {subscriberSessionId} subscribed to {publisherSessionId} (V:{subVideo} P:{subPose} A:{subAudio} TL:{subTelemetryLowRate} TH:{subTelemetryHighRate})");
                 return;
             }
 
@@ -191,9 +195,11 @@ namespace GrpcHttp3Demo.Sessions
 
         public static string[] ToTopicNames(SystemMonitorTopicMask topics)
         {
-            var names = new List<string>(2);
+            var names = new List<string>(4);
             if ((topics & SystemMonitorTopicMask.UdpGlobal) != 0) names.Add("udp_global");
             if ((topics & SystemMonitorTopicMask.SignalingRates) != 0) names.Add("signaling_rates");
+            if ((topics & SystemMonitorTopicMask.OnlineSummary) != 0) names.Add("online_summary");
+            if ((topics & SystemMonitorTopicMask.RuntimeTables) != 0) names.Add("runtime_tables");
             return names.ToArray();
         }
 

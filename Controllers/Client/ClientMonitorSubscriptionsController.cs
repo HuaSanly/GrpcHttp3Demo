@@ -122,6 +122,14 @@ namespace GrpcHttp3Demo.Controllers.Client
                     case "signaling_rates":
                         topics |= SystemMonitorTopicMask.SignalingRates;
                         break;
+                    case "online":
+                    case "online_summary":
+                        topics |= SystemMonitorTopicMask.OnlineSummary;
+                        break;
+                    case "runtime":
+                    case "runtime_tables":
+                        topics |= SystemMonitorTopicMask.RuntimeTables;
+                        break;
                     default:
                         error = $"Unsupported monitor topic: {raw}";
                         return false;

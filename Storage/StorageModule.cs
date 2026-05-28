@@ -1,5 +1,6 @@
 using GrpcHttp3Demo.Storage.Memory;
 using GrpcHttp3Demo.Storage.Memory.Session;
+using GrpcHttp3Demo.Storage.Postgres;
 
 namespace GrpcHttp3Demo.Storage
 {
@@ -9,6 +10,8 @@ namespace GrpcHttp3Demo.Storage
         {
             services.AddSingleton<SessionMemoryStore>();
             services.AddSingleton<MemoryStorageCatalog>();
+            services.AddSingleton(sp => PostgresConnectionOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+            services.AddSingleton<PostgresConnectionTester>();
             return services;
         }
     }

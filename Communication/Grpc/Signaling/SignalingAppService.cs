@@ -94,7 +94,7 @@ namespace GrpcHttp3Demo.Communication.Grpc.Signaling
 
         public async Task<SubscribeResponse> SubscribeAsync(string? subscriberSessionId, SubscribeRequest request)
         {
-            _logger.LogInformation($"[Subscribe] Subscriber={subscriberSessionId}, Op={request.Op}, Publisher={request.PublisherSessionId}, Video={request.SubVideo}, Pose={request.SubPose}, Audio={request.SubAudio}");
+            _logger.LogInformation($"[Subscribe] Subscriber={subscriberSessionId}, Op={request.Op}, Publisher={request.PublisherSessionId}, Video={request.SubVideo}, Pose={request.SubPose}, Audio={request.SubAudio}, TelemetryLowRate={request.SubTelemetryLowRate}, TelemetryHighRate={request.SubTelemetryHighRate}");
 
             if (string.IsNullOrEmpty(subscriberSessionId))
             {
@@ -254,7 +254,7 @@ namespace GrpcHttp3Demo.Communication.Grpc.Signaling
             if (string.IsNullOrEmpty(publisherSessionId)) return Task.CompletedTask;
 
             var isSub = req.Op == SubscribeRequest.Types.Operation.Subscribe;
-            _subscriptions.UpdateSubscription(publisherSessionId, subscriberSessionId, isSub, req.SubVideo, req.SubPose, req.SubAudio);
+            _subscriptions.UpdateSubscription(publisherSessionId, subscriberSessionId, isSub, req.SubVideo, req.SubPose, req.SubAudio, req.SubTelemetryLowRate, req.SubTelemetryHighRate);
 
             // [Replay] If this is a new video subscription, check for cached config
             if (isSub && req.SubVideo)

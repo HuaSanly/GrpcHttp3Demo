@@ -11,11 +11,13 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
     {
         private readonly SessionQueries _sessions;
         private readonly UdpForwardingMetricsService _forwardingMetrics;
+        private readonly SessionLivenessOptions _livenessOptions;
 
-        public SessionsMonitorController(SessionQueries sessions, UdpForwardingMetricsService forwardingMetrics)
+        public SessionsMonitorController(SessionQueries sessions, UdpForwardingMetricsService forwardingMetrics, SessionLivenessOptions livenessOptions)
         {
             _sessions = sessions;
             _forwardingMetrics = forwardingMetrics;
+            _livenessOptions = livenessOptions;
         }
 
         // 粗略列表：用于前端列表页
@@ -25,7 +27,7 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
         [HttpGet]
         public IActionResult List([FromQuery] string? role, [FromQuery] bool onlineOnly = false)
         {
-            var onlineTimeout = TimeSpan.FromSeconds(30);
+            var onlineTimeout = _livenessOptions.Timeout;
             var roleFilter = ParseRole(role);
 
             var items = _sessions.ListSessions(onlineTimeout, roleFilter, onlineOnly);
@@ -43,7 +45,7 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
         [HttpGet("{sessionId}")]
         public IActionResult Detail([FromRoute] string sessionId)
         {
-            var onlineTimeout = TimeSpan.FromSeconds(30);
+            var onlineTimeout = _livenessOptions.Timeout;
             var detail = _sessions.GetSessionDetail(sessionId, onlineTimeout, _forwardingMetrics);
             if (detail == null) return NotFound(new { message = $"Session not found: {sessionId}" });
             return Ok(new { updatedUtc = DateTime.UtcNow, timeoutSeconds = (int)onlineTimeout.TotalSeconds, detail });

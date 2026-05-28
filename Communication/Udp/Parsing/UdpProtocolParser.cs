@@ -10,7 +10,9 @@ namespace GrpcHttp3Demo.Communication.Udp.Parsing
         Video = 0x01,
         Pose = 0x02,
         Feedback = 0x03,
-        Audio = 0x04
+        Audio = 0x04,
+        TelemetryLowRate = 0x05,
+        TelemetryHighRate = 0x06
     }
 
     internal enum UdpControlPacketType
@@ -44,6 +46,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Parsing
                 0x02 => UdpDatagramKind.Pose,
                 0x03 => UdpDatagramKind.Feedback,
                 0x04 => UdpDatagramKind.Audio,
+                0x05 => UdpDatagramKind.TelemetryLowRate,
+                0x06 => UdpDatagramKind.TelemetryHighRate,
                 _ => UdpDatagramKind.Unknown
             };
         }

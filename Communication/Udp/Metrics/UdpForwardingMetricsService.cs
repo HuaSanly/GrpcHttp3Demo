@@ -17,6 +17,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _poseBytesTotal;
         private long _audioPacketsTotal;
         private long _audioBytesTotal;
+        private long _telemetryPacketsTotal;
+        private long _telemetryBytesTotal;
         private long _feedbackPacketsTotal;
         private long _feedbackBytesTotal;
 
@@ -26,6 +28,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _poseBytesThisSecond;
         private long _audioPacketsThisSecond;
         private long _audioBytesThisSecond;
+        private long _telemetryPacketsThisSecond;
+        private long _telemetryBytesThisSecond;
         private long _feedbackPacketsThisSecond;
         private long _feedbackBytesThisSecond;
 
@@ -35,6 +39,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _lastPoseBps;
         private long _lastAudioPps;
         private long _lastAudioBps;
+        private long _lastTelemetryPps;
+        private long _lastTelemetryBps;
         private long _lastFeedbackPps;
         private long _lastFeedbackBps;
 
@@ -46,6 +52,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             _lastPoseBps = Interlocked.Exchange(ref _poseBytesThisSecond, 0);
             _lastAudioPps = Interlocked.Exchange(ref _audioPacketsThisSecond, 0);
             _lastAudioBps = Interlocked.Exchange(ref _audioBytesThisSecond, 0);
+            _lastTelemetryPps = Interlocked.Exchange(ref _telemetryPacketsThisSecond, 0);
+            _lastTelemetryBps = Interlocked.Exchange(ref _telemetryBytesThisSecond, 0);
             _lastFeedbackPps = Interlocked.Exchange(ref _feedbackPacketsThisSecond, 0);
             _lastFeedbackBps = Interlocked.Exchange(ref _feedbackBytesThisSecond, 0);
         }
@@ -74,6 +82,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             Interlocked.Add(ref _audioBytesThisSecond, bytes);
         }
 
+        public void RecordTelemetry(int bytes)
+        {
+            Interlocked.Increment(ref _telemetryPacketsTotal);
+            Interlocked.Add(ref _telemetryBytesTotal, bytes);
+            Interlocked.Increment(ref _telemetryPacketsThisSecond);
+            Interlocked.Add(ref _telemetryBytesThisSecond, bytes);
+        }
+
         public void RecordFeedback(int bytes)
         {
             Interlocked.Increment(ref _feedbackPacketsTotal);
@@ -94,6 +110,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     poseBps = Interlocked.Read(ref _lastPoseBps),
                     audioPps = Interlocked.Read(ref _lastAudioPps),
                     audioBps = Interlocked.Read(ref _lastAudioBps),
+                    telemetryPps = Interlocked.Read(ref _lastTelemetryPps),
+                    telemetryBps = Interlocked.Read(ref _lastTelemetryBps),
                     feedbackPps = Interlocked.Read(ref _lastFeedbackPps),
                     feedbackBps = Interlocked.Read(ref _lastFeedbackBps)
                 },
@@ -105,6 +123,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     poseBytes = Interlocked.Read(ref _poseBytesTotal),
                     audioPackets = Interlocked.Read(ref _audioPacketsTotal),
                     audioBytes = Interlocked.Read(ref _audioBytesTotal),
+                    telemetryPackets = Interlocked.Read(ref _telemetryPacketsTotal),
+                    telemetryBytes = Interlocked.Read(ref _telemetryBytesTotal),
                     feedbackPackets = Interlocked.Read(ref _feedbackPacketsTotal),
                     feedbackBytes = Interlocked.Read(ref _feedbackBytesTotal)
                 }
@@ -150,13 +170,17 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             IPEndPoint sourceEndpoint,
             ImmutableArray<UdpForwardTarget> videoTargets,
             ImmutableArray<UdpForwardTarget> poseTargets,
-            ImmutableArray<UdpForwardTarget> audioTargets)
+            ImmutableArray<UdpForwardTarget> audioTargets,
+            ImmutableArray<UdpForwardTarget> telemetryLowRateTargets,
+            ImmutableArray<UdpForwardTarget> telemetryHighRateTargets)
         {
             SourceSessionId = sourceSessionId;
             SourceEndpoint = sourceEndpoint;
             VideoTargets = videoTargets;
             PoseTargets = poseTargets;
             AudioTargets = audioTargets;
+            TelemetryLowRateTargets = telemetryLowRateTargets;
+            TelemetryHighRateTargets = telemetryHighRateTargets;
         }
 
         public string SourceSessionId { get; }
@@ -164,6 +188,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         public ImmutableArray<UdpForwardTarget> VideoTargets { get; }
         public ImmutableArray<UdpForwardTarget> PoseTargets { get; }
         public ImmutableArray<UdpForwardTarget> AudioTargets { get; }
+        public ImmutableArray<UdpForwardTarget> TelemetryLowRateTargets { get; }
+        public ImmutableArray<UdpForwardTarget> TelemetryHighRateTargets { get; }
 
         public bool TryMarkDataActivityDue(long nowTickMs, long intervalMs)
         {

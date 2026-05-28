@@ -20,6 +20,8 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _forwardingTable = new();
         private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _poseForwardingTable = new();
         private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _audioForwardingTable = new();
+        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _telemetryLowRateForwardingTable = new();
+        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _telemetryHighRateForwardingTable = new();
         private readonly ConcurrentDictionary<IPEndPoint, UdpSourceRoute> _sourceRouteTable = new();
         private readonly ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> _feedbackRoute = new();
         private readonly ConcurrentDictionary<string, byte[]> _p2pSharedKeys = new();
@@ -36,6 +38,8 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> ForwardingTable => _forwardingTable;
         internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> PoseForwardingTable => _poseForwardingTable;
         internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> AudioForwardingTable => _audioForwardingTable;
+        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> TelemetryLowRateForwardingTable => _telemetryLowRateForwardingTable;
+        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> TelemetryHighRateForwardingTable => _telemetryHighRateForwardingTable;
         internal ConcurrentDictionary<IPEndPoint, UdpSourceRoute> SourceRouteTable => _sourceRouteTable;
         internal ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> FeedbackRoute => _feedbackRoute;
         internal ConcurrentDictionary<string, byte[]> P2pSharedKeys => _p2pSharedKeys;
@@ -79,6 +83,16 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
             return _audioForwardingTable.TryGetValue(sourceEndpoint, out targets);
         }
 
+        public bool TryGetTelemetryLowRateForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
+        {
+            return _telemetryLowRateForwardingTable.TryGetValue(sourceEndpoint, out targets);
+        }
+
+        public bool TryGetTelemetryHighRateForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
+        {
+            return _telemetryHighRateForwardingTable.TryGetValue(sourceEndpoint, out targets);
+        }
+
         public bool TryGetSourceRoute(IPEndPoint sourceEndpoint, out UdpSourceRoute? route)
         {
             return _sourceRouteTable.TryGetValue(sourceEndpoint, out route);
@@ -113,6 +127,8 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
                 forwardingTable = _forwardingTable.Count,
                 poseForwardingTable = _poseForwardingTable.Count,
                 audioForwardingTable = _audioForwardingTable.Count,
+                telemetryLowRateForwardingTable = _telemetryLowRateForwardingTable.Count,
+                telemetryHighRateForwardingTable = _telemetryHighRateForwardingTable.Count,
                 sourceRouteTable = _sourceRouteTable.Count,
                 systemMonitorTargets = SystemMonitorTargets.Length,
                 feedbackRoute = _feedbackRoute.Count,

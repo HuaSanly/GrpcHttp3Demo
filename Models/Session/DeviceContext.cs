@@ -18,6 +18,9 @@ namespace GrpcHttp3Demo.Models.Session
         public string ClientIp { get; set; } = string.Empty;
         public int ClientPort { get; set; }
         public DateTime LastHeartbeatUtc { get; set; } = DateTime.UtcNow;
+        public DateTime LastTransportConnectedUtc { get; set; } = DateTime.MinValue;
+        public DateTime LastTransportDisconnectedUtc { get; set; } = DateTime.MinValue;
+        public string? LastTransportDisconnectReason { get; set; }
 
         // --- UDP 活跃性 ---
         // 只由 UDP 控制面（HELLO/PING 且验签通过）更新映射；

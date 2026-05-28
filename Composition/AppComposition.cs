@@ -54,7 +54,8 @@ namespace GrpcHttp3Demo.Composition
         {
             app
                 .UseAppConfigModule()
-                .UseWebSocketsModule();
+                .UseWebSocketsModule()
+                .UseHttpApiModule();
 
             return app;
         }
@@ -64,13 +65,27 @@ namespace GrpcHttp3Demo.Composition
         /// </summary>
         public static WebApplication MapRoutesModule(this WebApplication app)
         {
+            var docsEnabled = app.Configuration.GetValue("ApiDocs:Enabled", true);
+            var defaultUi = app.Configuration["ApiDocs:DefaultUi"] ?? "scalar";
+            var docsRoutePrefix = string.Equals(defaultUi, "swagger", StringComparison.OrdinalIgnoreCase)
+                ? (app.Configuration["ApiDocs:SwaggerRoutePrefix"] ?? "swagger")
+                : (app.Configuration["ApiDocs:ScalarRoutePrefix"] ?? "scalar");
+
             app
                 .MapGrpcModule()
                 .MapWebSocketsModule()
                 .MapHttpApiModule();
 
             // 其它非模块化的简单路由也可以留在这里
-            app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client.");
+            app.MapGet("/", () =>
+            {
+                if (docsEnabled)
+                {
+                    return Results.Redirect($"/{docsRoutePrefix}");
+                }
+
+                return Results.Text("Communication with gRPC endpoints must be made through a gRPC client.");
+            });
 
             return app;
         }

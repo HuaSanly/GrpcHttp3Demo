@@ -8,17 +8,17 @@ namespace GrpcHttp3Demo.Sessions.Background
         private readonly SessionPresence _presence;
         private readonly UdpSessionBindingService _udpBindings;
         private readonly ILogger<SessionCleanupService> _logger;
+        private readonly SessionLivenessOptions _livenessOptions;
         private readonly TimeSpan _udpControlTimeout;
         private readonly TimeSpan _udpRescueCooldown;
         private readonly int _udpMaxRescues;
-        private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(10);
-        private readonly TimeSpan _sessionTimeout = TimeSpan.FromSeconds(30);
 
-        public SessionCleanupService(SessionPresence presence, UdpSessionBindingService udpBindings, ILogger<SessionCleanupService> logger, IConfiguration configuration)
+        public SessionCleanupService(SessionPresence presence, UdpSessionBindingService udpBindings, ILogger<SessionCleanupService> logger, IConfiguration configuration, SessionLivenessOptions livenessOptions)
         {
             _presence = presence;
             _udpBindings = udpBindings;
             _logger = logger;
+            _livenessOptions = livenessOptions;
 
             // UDP 端点映射过期与救援参数（默认值与文档策略保持一致，可在配置中覆盖）
             var udpControlTimeoutSeconds = configuration.GetValue<int>("MediaServer:UdpControlTimeoutSeconds", 15);
@@ -37,9 +37,8 @@ namespace GrpcHttp3Demo.Sessions.Background
             {
                 try
                 {
-                    await Task.Delay(_checkInterval, stoppingToken);
-                    // 使用新的 CheckAndRescueSessions 方法，包含救援逻辑
-                    _presence.CheckAndRescueSessions(_sessionTimeout);
+                    await Task.Delay(_livenessOptions.CleanupCheckInterval, stoppingToken);
+                    await _presence.CheckAndRescueSessionsAsync();
 
                     // UDP 端点映射过期检测与救援（不影响会话在线判定）
                     _udpBindings.CheckAndRescueMappings(_udpControlTimeout, _udpRescueCooldown, _udpMaxRescues);

@@ -5,6 +5,8 @@ namespace GrpcHttp3Demo.Models.Session
     {
         None = 0,
         UdpGlobal = 1,
-        SignalingRates = 2
+        SignalingRates = 2,
+        OnlineSummary = 4,
+        RuntimeTables = 8
     }
 }

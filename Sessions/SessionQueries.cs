@@ -13,12 +13,14 @@ namespace GrpcHttp3Demo.Sessions
         private readonly SessionMemoryStore _memory;
         private readonly PushChannelRegistry _pushChannels;
         private readonly SessionPairing _pairing;
+        private readonly SessionPresence _presence;
 
-        public SessionQueries(SessionMemoryStore memory, PushChannelRegistry pushChannels, SessionPairing pairing)
+        public SessionQueries(SessionMemoryStore memory, PushChannelRegistry pushChannels, SessionPairing pairing, SessionPresence presence)
         {
             _memory = memory;
             _pushChannels = pushChannels;
             _pairing = pairing;
+            _presence = presence;
         }
 
         public IEnumerable<object> ListSessions(TimeSpan onlineTimeout, RegisterRequest.Types.EndpointType? roleFilter, bool onlineOnly)
@@ -28,7 +30,7 @@ namespace GrpcHttp3Demo.Sessions
             foreach (var item in _memory.Sessions)
             {
                 var context = item.Value;
-                var online = now - context.LastHeartbeatUtc <= onlineTimeout;
+                var online = _presence.IsSessionOnline(item.Key, context, onlineTimeout, now);
 
                 if (onlineOnly && !online) continue;
                 if (roleFilter.HasValue && roleFilter.Value != RegisterRequest.Types.EndpointType.Unknown && context.Role != roleFilter.Value) continue;
@@ -56,7 +58,7 @@ namespace GrpcHttp3Demo.Sessions
             }
 
             var now = DateTime.UtcNow;
-            var online = now - context.LastHeartbeatUtc <= onlineTimeout;
+            var online = _presence.IsSessionOnline(sessionId, context, onlineTimeout, now);
             var pairedSessionId = _pairing.GetPairedSession(sessionId);
 
             var subscribersMeta = Array.Empty<object>();
@@ -69,6 +71,8 @@ namespace GrpcHttp3Demo.Sessions
                     subVideo = meta.SubVideo,
                     subPose = meta.SubPose,
                     subAudio = meta.SubAudio,
+                    subTelemetryLowRate = meta.SubTelemetryLowRate,
+                    subTelemetryHighRate = meta.SubTelemetryHighRate,
                     lastUpdatedUtc = meta.LastUpdatedUtc,
                     targetBitrateKbps = meta.TargetBitrateKbps,
                     subscriberBandwidthKbps = meta.SubscriberBandwidthKbps,
@@ -90,6 +94,8 @@ namespace GrpcHttp3Demo.Sessions
                         subVideo = meta?.SubVideo ?? false,
                         subPose = meta?.SubPose ?? false,
                         subAudio = meta?.SubAudio ?? false,
+                        subTelemetryLowRate = meta?.SubTelemetryLowRate ?? false,
+                        subTelemetryHighRate = meta?.SubTelemetryHighRate ?? false,
                         lastUpdatedUtc = meta?.LastUpdatedUtc
                     };
                 })
@@ -142,6 +148,12 @@ namespace GrpcHttp3Demo.Sessions
                     lastDataUtc = context.LastUdpDataUtc == DateTime.MinValue ? (DateTime?)null : context.LastUdpDataUtc
                 },
                 heartbeat = new { lastHeartbeatUtc = context.LastHeartbeatUtc },
+                transport = new
+                {
+                    lastConnectedUtc = context.LastTransportConnectedUtc == DateTime.MinValue ? (DateTime?)null : context.LastTransportConnectedUtc,
+                    lastDisconnectedUtc = context.LastTransportDisconnectedUtc == DateTime.MinValue ? (DateTime?)null : context.LastTransportDisconnectedUtc,
+                    lastDisconnectReason = context.LastTransportDisconnectReason
+                },
                 pairing = new
                 {
                     pairedSessionId,
@@ -161,7 +173,9 @@ namespace GrpcHttp3Demo.Sessions
                         subscriberId = subscription.SubscriberId,
                         subVideo = subscription.SubVideo,
                         subPose = subscription.SubPose,
-                        subAudio = subscription.SubAudio
+                        subAudio = subscription.SubAudio,
+                        subTelemetryLowRate = subscription.SubTelemetryLowRate,
+                        subTelemetryHighRate = subscription.SubTelemetryHighRate
                     }).ToArray()
                 },
                 subscriptionMeta = new { subscribers = subscribersMeta, subscribedTo },
