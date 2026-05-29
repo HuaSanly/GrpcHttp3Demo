@@ -11,7 +11,10 @@ namespace GrpcHttp3Demo.Storage
             services.AddSingleton<SessionMemoryStore>();
             services.AddSingleton<MemoryStorageCatalog>();
             services.AddSingleton(sp => PostgresConnectionOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+            services.AddSingleton<PostgresSqlSugarFactory>();
+            services.AddSingleton<PostgresDatabaseInitializer>();
             services.AddSingleton<PostgresConnectionTester>();
+            services.AddHostedService<PostgresDatabaseInitializationService>();
             return services;
         }
     }

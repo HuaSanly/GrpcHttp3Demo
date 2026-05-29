@@ -16,7 +16,7 @@ WPF / 上位机客户端应以 gRPC `CLIENT` 角色注册：
 ```csharp
 var reg = await client.RegisterAsync(new RegisterRequest
 {
-    Token = token,
+  Token = string.Empty,
     Role = RegisterRequest.Types.EndpointType.Client,
     DeviceId = "wpf-monitor-01",
     RobotGeneration = 0,
@@ -30,6 +30,8 @@ var reg = await client.RegisterAsync(new RegisterRequest
 - `ClientIp` / `ClientPort`：用于显示和排障，不等价于 UDP endpoint。
 
 `device_id` 当前主要用于展示，不能作为权限判断依据。监控订阅权限由现有 admin bearer token 控制。
+
+说明：当前实现里，gRPC `Register` 还不会校验 `RegisterRequest.Token`。如果客户端只走 gRPC 信令链路，可以先 `Register`；如果客户端还要调用 HTTP 管理接口，则仍然需要先走 HTTP 登录拿 admin bearer token。
 
 ---
 
@@ -109,7 +111,7 @@ var headers = new Metadata
 
 ## 5. 推荐启动顺序
 
-控制面与监控面完整启动顺序：
+控制面与监控面完整启动顺序（推荐用于 WPF / 上位机客户端）：
 
 1. HTTP `POST /api/client/auth/login` 获取 admin bearer token。
 2. gRPC `Register(role=CLIENT)` 获取 `SessionId`。
@@ -150,7 +152,7 @@ sequenceDiagram
 
 ### Ping
 
-建议每 `5s ~ 10s` 调一次 gRPC `Ping`，明显小于当前 30 秒在线窗口。
+当前默认会话参数是：心跳建议周期 `3s`，在线超时窗口 `8s`。WPF 客户端建议每 `2s ~ 3s` 调一次 gRPC `Ping`，不要高于 `3s`。
 
 ```csharp
 await client.PingAsync(new Heartbeat
@@ -266,6 +268,16 @@ Authorization: Bearer <accessToken>
 - `online_summary`：服务端视角的注册数、在线数、按角色在线数、推送通道连通数。
 - `runtime_tables`：后端运行时会话表、配对表、转发表、反馈路由等内部表数量快照。
 
+其中 `udp_global` 里的 UDP 分类统计当前已包含：
+
+- `0x01` video
+- `0x02` pose
+- `0x03` feedback
+- `0x04` audio
+- `0x05` telemetryLowRate
+- `0x06` telemetryHighRate
+- `0x07` system
+
 成功响应：
 
 ```json
@@ -290,7 +302,7 @@ Authorization: Bearer <accessToken>
 
 ## 9. UDP 0x07 监控包
 
-服务端系统自产 UDP 数据从 `0x07` 开始；`0x05` 和 `0x06` 已预留给其它用途。
+服务端系统自产 UDP 数据从 `0x07` 开始；`0x05` 和 `0x06` 当前已经用于机器人 telemetry 转发，不属于 `0x07` 系统监控范围。
 
 监控包格式：
 
@@ -352,7 +364,9 @@ await client.SubscribeAsync(new SubscribeRequest
     PublisherSessionId = robotSessionId,
     SubVideo = false,
     SubPose = true,
-    SubAudio = true
+  SubAudio = true,
+  SubTelemetryLowRate = true,
+  SubTelemetryHighRate = false
 }, headers);
 ```
 
@@ -365,9 +379,16 @@ await client.SubscribeAsync(new SubscribeRequest
     PublisherSessionId = robotSessionId,
     SubVideo = false,
     SubPose = true,
-    SubAudio = true
+  SubAudio = true,
+  SubTelemetryLowRate = true,
+  SubTelemetryHighRate = false
 }, headers);
 ```
+
+字段含义：
+
+- `SubTelemetryLowRate = true`：订阅 `0x05`
+- `SubTelemetryHighRate = true`：订阅 `0x06`
 
 媒体订阅控制的是机器人/VR/客户端之间的媒体发布者与订阅者关系；系统监控订阅的发布者固定为 `system:monitor`，由 HTTP admin 接口控制。
 
@@ -409,7 +430,7 @@ await SendUdpHelloAsync(reg.SessionId, cancellationToken);
 await httpClient.PostAsJsonAsync("/api/client/monitor/subscriptions", new
 {
     subscriberSessionId = reg.SessionId,
-    topics = new[] { "udp_global", "signaling_rates" },
+  topics = new[] { "udp_global", "signaling_rates", "online_summary", "runtime_tables" },
     intervalMs = 1000
 }, cancellationToken);
 ```

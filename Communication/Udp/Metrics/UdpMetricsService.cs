@@ -19,6 +19,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _poseTotal;
         private long _audioTotal;
         private long _feedbackTotal;
+        private long _telemetryLowRateTotal;
+        private long _telemetryHighRateTotal;
         private long _systemTotal;
         private long _unknownTotal;
 
@@ -30,6 +32,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _poseThisSecond;
         private long _audioThisSecond;
         private long _feedbackThisSecond;
+        private long _telemetryLowRateThisSecond;
+        private long _telemetryHighRateThisSecond;
         private long _systemThisSecond;
         private long _unknownThisSecond;
 
@@ -41,6 +45,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _lastPosePerSecond;
         private long _lastAudioPerSecond;
         private long _lastFeedbackPerSecond;
+        private long _lastTelemetryLowRatePerSecond;
+        private long _lastTelemetryHighRatePerSecond;
         private long _lastSystemPerSecond;
         private long _lastUnknownPerSecond;
 
@@ -53,6 +59,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txPoseTotal;
         private long _txAudioTotal;
         private long _txFeedbackTotal;
+        private long _txTelemetryLowRateTotal;
+        private long _txTelemetryHighRateTotal;
         private long _txSystemTotal;
         private long _txUnknownTotal;
 
@@ -64,6 +72,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txPoseThisSecond;
         private long _txAudioThisSecond;
         private long _txFeedbackThisSecond;
+        private long _txTelemetryLowRateThisSecond;
+        private long _txTelemetryHighRateThisSecond;
         private long _txSystemThisSecond;
         private long _txUnknownThisSecond;
 
@@ -75,6 +85,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txLastPosePerSecond;
         private long _txLastAudioPerSecond;
         private long _txLastFeedbackPerSecond;
+        private long _txLastTelemetryLowRatePerSecond;
+        private long _txLastTelemetryHighRatePerSecond;
         private long _txLastSystemPerSecond;
         private long _txLastUnknownPerSecond;
 
@@ -87,6 +99,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txOkPoseTotal;
         private long _txOkAudioTotal;
         private long _txOkFeedbackTotal;
+        private long _txOkTelemetryLowRateTotal;
+        private long _txOkTelemetryHighRateTotal;
         private long _txOkSystemTotal;
         private long _txOkUnknownTotal;
 
@@ -98,6 +112,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txOkPoseThisSecond;
         private long _txOkAudioThisSecond;
         private long _txOkFeedbackThisSecond;
+        private long _txOkTelemetryLowRateThisSecond;
+        private long _txOkTelemetryHighRateThisSecond;
         private long _txOkSystemThisSecond;
         private long _txOkUnknownThisSecond;
 
@@ -109,6 +125,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txOkLastPosePerSecond;
         private long _txOkLastAudioPerSecond;
         private long _txOkLastFeedbackPerSecond;
+        private long _txOkLastTelemetryLowRatePerSecond;
+        private long _txOkLastTelemetryHighRatePerSecond;
         private long _txOkLastSystemPerSecond;
         private long _txOkLastUnknownPerSecond;
 
@@ -121,6 +139,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txFailPoseTotal;
         private long _txFailAudioTotal;
         private long _txFailFeedbackTotal;
+        private long _txFailTelemetryLowRateTotal;
+        private long _txFailTelemetryHighRateTotal;
         private long _txFailSystemTotal;
         private long _txFailUnknownTotal;
 
@@ -132,6 +152,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txFailPoseThisSecond;
         private long _txFailAudioThisSecond;
         private long _txFailFeedbackThisSecond;
+        private long _txFailTelemetryLowRateThisSecond;
+        private long _txFailTelemetryHighRateThisSecond;
         private long _txFailSystemThisSecond;
         private long _txFailUnknownThisSecond;
 
@@ -143,6 +165,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _txFailLastPosePerSecond;
         private long _txFailLastAudioPerSecond;
         private long _txFailLastFeedbackPerSecond;
+        private long _txFailLastTelemetryLowRatePerSecond;
+        private long _txFailLastTelemetryHighRatePerSecond;
         private long _txFailLastSystemPerSecond;
         private long _txFailLastUnknownPerSecond;
 
@@ -170,6 +194,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _fwdQueueDropPoseTotal;
         private long _fwdQueueDropAudioTotal;
         private long _fwdQueueDropFeedbackTotal;
+        private long _fwdQueueDropTelemetryLowRateTotal;
+        private long _fwdQueueDropTelemetryHighRateTotal;
         private long _fwdQueueDropSystemTotal;
         private long _fwdQueueDropUnknownTotal;
 
@@ -177,6 +203,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _fwdQueueDropPoseThisSecond;
         private long _fwdQueueDropAudioThisSecond;
         private long _fwdQueueDropFeedbackThisSecond;
+        private long _fwdQueueDropTelemetryLowRateThisSecond;
+        private long _fwdQueueDropTelemetryHighRateThisSecond;
         private long _fwdQueueDropSystemThisSecond;
         private long _fwdQueueDropUnknownThisSecond;
 
@@ -184,6 +212,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private long _fwdQueueDropLastPosePerSecond;
         private long _fwdQueueDropLastAudioPerSecond;
         private long _fwdQueueDropLastFeedbackPerSecond;
+        private long _fwdQueueDropLastTelemetryLowRatePerSecond;
+        private long _fwdQueueDropLastTelemetryHighRatePerSecond;
         private long _fwdQueueDropLastSystemPerSecond;
         private long _fwdQueueDropLastUnknownPerSecond;
 
@@ -228,6 +258,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 case 0x03:
                     Interlocked.Increment(ref _feedbackTotal);
                     Interlocked.Increment(ref _feedbackThisSecond);
+                    return;
+                case 0x05:
+                    Interlocked.Increment(ref _telemetryLowRateTotal);
+                    Interlocked.Increment(ref _telemetryLowRateThisSecond);
+                    return;
+                case 0x06:
+                    Interlocked.Increment(ref _telemetryHighRateTotal);
+                    Interlocked.Increment(ref _telemetryHighRateThisSecond);
                     return;
                 case 0x07:
                     Interlocked.Increment(ref _systemTotal);
@@ -285,6 +323,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _txFeedbackTotal);
                     Interlocked.Increment(ref _txFeedbackThisSecond);
                     return;
+                case 0x05:
+                    Interlocked.Increment(ref _txTelemetryLowRateTotal);
+                    Interlocked.Increment(ref _txTelemetryLowRateThisSecond);
+                    return;
+                case 0x06:
+                    Interlocked.Increment(ref _txTelemetryHighRateTotal);
+                    Interlocked.Increment(ref _txTelemetryHighRateThisSecond);
+                    return;
                 case 0x07:
                     Interlocked.Increment(ref _txSystemTotal);
                     Interlocked.Increment(ref _txSystemThisSecond);
@@ -328,6 +374,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 case 0x03:
                     Interlocked.Increment(ref _txOkFeedbackTotal);
                     Interlocked.Increment(ref _txOkFeedbackThisSecond);
+                    return;
+                case 0x05:
+                    Interlocked.Increment(ref _txOkTelemetryLowRateTotal);
+                    Interlocked.Increment(ref _txOkTelemetryLowRateThisSecond);
+                    return;
+                case 0x06:
+                    Interlocked.Increment(ref _txOkTelemetryHighRateTotal);
+                    Interlocked.Increment(ref _txOkTelemetryHighRateThisSecond);
                     return;
                 case 0x07:
                     Interlocked.Increment(ref _txOkSystemTotal);
@@ -379,6 +433,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _txFailFeedbackTotal);
                     Interlocked.Increment(ref _txFailFeedbackThisSecond);
                     return;
+                case 0x05:
+                    Interlocked.Increment(ref _txFailTelemetryLowRateTotal);
+                    Interlocked.Increment(ref _txFailTelemetryLowRateThisSecond);
+                    return;
+                case 0x06:
+                    Interlocked.Increment(ref _txFailTelemetryHighRateTotal);
+                    Interlocked.Increment(ref _txFailTelemetryHighRateThisSecond);
+                    return;
                 case 0x07:
                     Interlocked.Increment(ref _txFailSystemTotal);
                     Interlocked.Increment(ref _txFailSystemThisSecond);
@@ -421,6 +483,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _fwdQueueDropFeedbackTotal);
                     Interlocked.Increment(ref _fwdQueueDropFeedbackThisSecond);
                     return;
+                case 0x05:
+                    Interlocked.Increment(ref _fwdQueueDropTelemetryLowRateTotal);
+                    Interlocked.Increment(ref _fwdQueueDropTelemetryLowRateThisSecond);
+                    return;
+                case 0x06:
+                    Interlocked.Increment(ref _fwdQueueDropTelemetryHighRateTotal);
+                    Interlocked.Increment(ref _fwdQueueDropTelemetryHighRateThisSecond);
+                    return;
                 case 0x07:
                     Interlocked.Increment(ref _fwdQueueDropSystemTotal);
                     Interlocked.Increment(ref _fwdQueueDropSystemThisSecond);
@@ -444,6 +514,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 _lastPosePerSecond = Interlocked.Exchange(ref _poseThisSecond, 0);
                 _lastAudioPerSecond = Interlocked.Exchange(ref _audioThisSecond, 0);
                 _lastFeedbackPerSecond = Interlocked.Exchange(ref _feedbackThisSecond, 0);
+                _lastTelemetryLowRatePerSecond = Interlocked.Exchange(ref _telemetryLowRateThisSecond, 0);
+                _lastTelemetryHighRatePerSecond = Interlocked.Exchange(ref _telemetryHighRateThisSecond, 0);
                 _lastSystemPerSecond = Interlocked.Exchange(ref _systemThisSecond, 0);
                 _lastUnknownPerSecond = Interlocked.Exchange(ref _unknownThisSecond, 0);
 
@@ -455,6 +527,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 _txLastPosePerSecond = Interlocked.Exchange(ref _txPoseThisSecond, 0);
                 _txLastAudioPerSecond = Interlocked.Exchange(ref _txAudioThisSecond, 0);
                 _txLastFeedbackPerSecond = Interlocked.Exchange(ref _txFeedbackThisSecond, 0);
+                _txLastTelemetryLowRatePerSecond = Interlocked.Exchange(ref _txTelemetryLowRateThisSecond, 0);
+                _txLastTelemetryHighRatePerSecond = Interlocked.Exchange(ref _txTelemetryHighRateThisSecond, 0);
                 _txLastSystemPerSecond = Interlocked.Exchange(ref _txSystemThisSecond, 0);
                 _txLastUnknownPerSecond = Interlocked.Exchange(ref _txUnknownThisSecond, 0);
 
@@ -465,6 +539,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 _txOkLastPosePerSecond = Interlocked.Exchange(ref _txOkPoseThisSecond, 0);
                 _txOkLastAudioPerSecond = Interlocked.Exchange(ref _txOkAudioThisSecond, 0);
                 _txOkLastFeedbackPerSecond = Interlocked.Exchange(ref _txOkFeedbackThisSecond, 0);
+                _txOkLastTelemetryLowRatePerSecond = Interlocked.Exchange(ref _txOkTelemetryLowRateThisSecond, 0);
+                _txOkLastTelemetryHighRatePerSecond = Interlocked.Exchange(ref _txOkTelemetryHighRateThisSecond, 0);
                 _txOkLastSystemPerSecond = Interlocked.Exchange(ref _txOkSystemThisSecond, 0);
                 _txOkLastUnknownPerSecond = Interlocked.Exchange(ref _txOkUnknownThisSecond, 0);
 
@@ -475,6 +551,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 _txFailLastPosePerSecond = Interlocked.Exchange(ref _txFailPoseThisSecond, 0);
                 _txFailLastAudioPerSecond = Interlocked.Exchange(ref _txFailAudioThisSecond, 0);
                 _txFailLastFeedbackPerSecond = Interlocked.Exchange(ref _txFailFeedbackThisSecond, 0);
+                _txFailLastTelemetryLowRatePerSecond = Interlocked.Exchange(ref _txFailTelemetryLowRateThisSecond, 0);
+                _txFailLastTelemetryHighRatePerSecond = Interlocked.Exchange(ref _txFailTelemetryHighRateThisSecond, 0);
                 _txFailLastSystemPerSecond = Interlocked.Exchange(ref _txFailSystemThisSecond, 0);
                 _txFailLastUnknownPerSecond = Interlocked.Exchange(ref _txFailUnknownThisSecond, 0);
                 _txFailNoBufferLastPerSecond = Interlocked.Exchange(ref _txFailNoBufferThisSecond, 0);
@@ -487,6 +565,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 _fwdQueueDropLastPosePerSecond = Interlocked.Exchange(ref _fwdQueueDropPoseThisSecond, 0);
                 _fwdQueueDropLastAudioPerSecond = Interlocked.Exchange(ref _fwdQueueDropAudioThisSecond, 0);
                 _fwdQueueDropLastFeedbackPerSecond = Interlocked.Exchange(ref _fwdQueueDropFeedbackThisSecond, 0);
+                _fwdQueueDropLastTelemetryLowRatePerSecond = Interlocked.Exchange(ref _fwdQueueDropTelemetryLowRateThisSecond, 0);
+                _fwdQueueDropLastTelemetryHighRatePerSecond = Interlocked.Exchange(ref _fwdQueueDropTelemetryHighRateThisSecond, 0);
                 _fwdQueueDropLastSystemPerSecond = Interlocked.Exchange(ref _fwdQueueDropSystemThisSecond, 0);
                 _fwdQueueDropLastUnknownPerSecond = Interlocked.Exchange(ref _fwdQueueDropUnknownThisSecond, 0);
 
@@ -514,6 +594,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = _lastPosePerSecond,
                         audio = _lastAudioPerSecond,
                         feedback = _lastFeedbackPerSecond,
+                        telemetryLowRate = _lastTelemetryLowRatePerSecond,
+                        telemetryHighRate = _lastTelemetryHighRatePerSecond,
                         system = _lastSystemPerSecond,
                         unknown = _lastUnknownPerSecond
                     },
@@ -526,6 +608,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = Interlocked.Read(ref _poseTotal),
                         audio = Interlocked.Read(ref _audioTotal),
                         feedback = Interlocked.Read(ref _feedbackTotal),
+                        telemetryLowRate = Interlocked.Read(ref _telemetryLowRateTotal),
+                        telemetryHighRate = Interlocked.Read(ref _telemetryHighRateTotal),
                         system = Interlocked.Read(ref _systemTotal),
                         unknown = Interlocked.Read(ref _unknownTotal)
                     }
@@ -541,6 +625,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = _txLastPosePerSecond,
                         audio = _txLastAudioPerSecond,
                         feedback = _txLastFeedbackPerSecond,
+                        telemetryLowRate = _txLastTelemetryLowRatePerSecond,
+                        telemetryHighRate = _txLastTelemetryHighRatePerSecond,
                         system = _txLastSystemPerSecond,
                         unknown = _txLastUnknownPerSecond
                     },
@@ -553,6 +639,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = Interlocked.Read(ref _txPoseTotal),
                         audio = Interlocked.Read(ref _txAudioTotal),
                         feedback = Interlocked.Read(ref _txFeedbackTotal),
+                        telemetryLowRate = Interlocked.Read(ref _txTelemetryLowRateTotal),
+                        telemetryHighRate = Interlocked.Read(ref _txTelemetryHighRateTotal),
                         system = Interlocked.Read(ref _txSystemTotal),
                         unknown = Interlocked.Read(ref _txUnknownTotal)
                     }
@@ -568,6 +656,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = _txOkLastPosePerSecond,
                         audio = _txOkLastAudioPerSecond,
                         feedback = _txOkLastFeedbackPerSecond,
+                        telemetryLowRate = _txOkLastTelemetryLowRatePerSecond,
+                        telemetryHighRate = _txOkLastTelemetryHighRatePerSecond,
                         system = _txOkLastSystemPerSecond,
                         unknown = _txOkLastUnknownPerSecond
                     },
@@ -580,6 +670,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = Interlocked.Read(ref _txOkPoseTotal),
                         audio = Interlocked.Read(ref _txOkAudioTotal),
                         feedback = Interlocked.Read(ref _txOkFeedbackTotal),
+                        telemetryLowRate = Interlocked.Read(ref _txOkTelemetryLowRateTotal),
+                        telemetryHighRate = Interlocked.Read(ref _txOkTelemetryHighRateTotal),
                         system = Interlocked.Read(ref _txOkSystemTotal),
                         unknown = Interlocked.Read(ref _txOkUnknownTotal)
                     }
@@ -595,6 +687,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = _txFailLastPosePerSecond,
                         audio = _txFailLastAudioPerSecond,
                         feedback = _txFailLastFeedbackPerSecond,
+                        telemetryLowRate = _txFailLastTelemetryLowRatePerSecond,
+                        telemetryHighRate = _txFailLastTelemetryHighRatePerSecond,
                         system = _txFailLastSystemPerSecond,
                         unknown = _txFailLastUnknownPerSecond,
                         noBuffer = _txFailNoBufferLastPerSecond
@@ -608,6 +702,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                         pose = Interlocked.Read(ref _txFailPoseTotal),
                         audio = Interlocked.Read(ref _txFailAudioTotal),
                         feedback = Interlocked.Read(ref _txFailFeedbackTotal),
+                        telemetryLowRate = Interlocked.Read(ref _txFailTelemetryLowRateTotal),
+                        telemetryHighRate = Interlocked.Read(ref _txFailTelemetryHighRateTotal),
                         system = Interlocked.Read(ref _txFailSystemTotal),
                         unknown = Interlocked.Read(ref _txFailUnknownTotal),
                         noBuffer = Interlocked.Read(ref _txFailNoBufferTotal)
@@ -633,6 +729,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                             pose = _fwdQueueDropLastPosePerSecond,
                             audio = _fwdQueueDropLastAudioPerSecond,
                             feedback = _fwdQueueDropLastFeedbackPerSecond,
+                            telemetryLowRate = _fwdQueueDropLastTelemetryLowRatePerSecond,
+                            telemetryHighRate = _fwdQueueDropLastTelemetryHighRatePerSecond,
                             system = _fwdQueueDropLastSystemPerSecond,
                             unknown = _fwdQueueDropLastUnknownPerSecond
                         },
@@ -644,6 +742,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                             pose = Interlocked.Read(ref _fwdQueueDropPoseTotal),
                             audio = Interlocked.Read(ref _fwdQueueDropAudioTotal),
                             feedback = Interlocked.Read(ref _fwdQueueDropFeedbackTotal),
+                            telemetryLowRate = Interlocked.Read(ref _fwdQueueDropTelemetryLowRateTotal),
+                            telemetryHighRate = Interlocked.Read(ref _fwdQueueDropTelemetryHighRateTotal),
                             system = Interlocked.Read(ref _fwdQueueDropSystemTotal),
                             unknown = Interlocked.Read(ref _fwdQueueDropUnknownTotal)
                         }
