@@ -71,7 +71,7 @@ namespace GrpcHttp3Demo.Controllers.Client
                 publisherSessionId = SystemPublishers.MonitorPublisherSessionId,
                 subscriberSessionId = request.SubscriberSessionId,
                 udpEndpoint = session.UdpEndpoint.ToString(),
-                prefix = "0x07",
+                prefixes = SessionSubscription.ToPrefixes(topics),
                 topics = SessionSubscription.ToTopicNames(topics),
                 effectiveIntervalMs = intervalMs
             });

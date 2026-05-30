@@ -13,15 +13,19 @@ namespace GrpcHttp3Demo.Sessions
     {
         private readonly SessionMemoryStore _memory;
         private readonly UdpForwardingMetricsService _forwardingMetrics;
+        private readonly UdpLinkMetricsService _linkMetrics;
 
-        public SessionRouting(SessionMemoryStore memory, UdpForwardingMetricsService forwardingMetrics)
+        public SessionRouting(SessionMemoryStore memory, UdpForwardingMetricsService forwardingMetrics, UdpLinkMetricsService linkMetrics)
         {
             _memory = memory;
             _forwardingMetrics = forwardingMetrics;
+            _linkMetrics = linkMetrics;
         }
 
         public void RebuildForwardingForPublisher(string publisherSessionId)
         {
+            _linkMetrics.DeactivateLinksForOrigin(publisherSessionId);
+
             if (!_memory.Sessions.TryGetValue(publisherSessionId, out var publisher) || publisher.UdpEndpoint == null)
             {
                 if (_memory.SessionEndpointIndex.TryGetValue(publisherSessionId, out var oldEndpoint))
@@ -92,11 +96,11 @@ namespace GrpcHttp3Demo.Sessions
                 var targetSessionId = item.Key;
                 var (endpoint, counter, wantVideo, wantPose, wantAudio, wantTelemetryLowRate, wantTelemetryHighRate) = item.Value;
 
-                if (wantVideo) video.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
-                if (wantPose) pose.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
-                if (wantAudio) audio.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
-                if (wantTelemetryLowRate) telemetryLowRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
-                if (wantTelemetryHighRate) telemetryHighRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter));
+                if (wantVideo) video.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.Video)));
+                if (wantPose) pose.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.Pose)));
+                if (wantAudio) audio.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.Audio)));
+                if (wantTelemetryLowRate) telemetryLowRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.TelemetryLowRate)));
+                if (wantTelemetryHighRate) telemetryHighRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.TelemetryHighRate)));
             }
 
             var videoTargets = video.ToImmutableArray();
@@ -104,13 +108,30 @@ namespace GrpcHttp3Demo.Sessions
             var audioTargets = audio.ToImmutableArray();
             var telemetryLowRateTargets = telemetryLowRate.ToImmutableArray();
             var telemetryHighRateTargets = telemetryHighRate.ToImmutableArray();
+            var videoIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.Video);
+            var poseIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.Pose);
+            var audioIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.Audio);
+            var telemetryLowRateIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.TelemetryLowRate);
+            var telemetryHighRateIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.TelemetryHighRate);
 
             _memory.ForwardingTable[sourceEndpoint] = videoTargets;
             _memory.PoseForwardingTable[sourceEndpoint] = poseTargets;
             _memory.AudioForwardingTable[sourceEndpoint] = audioTargets;
             _memory.TelemetryLowRateForwardingTable[sourceEndpoint] = telemetryLowRateTargets;
             _memory.TelemetryHighRateForwardingTable[sourceEndpoint] = telemetryHighRateTargets;
-            _memory.SourceRouteTable[sourceEndpoint] = new UdpSourceRoute(publisherSessionId, sourceEndpoint, videoTargets, poseTargets, audioTargets, telemetryLowRateTargets, telemetryHighRateTargets);
+            _memory.SourceRouteTable[sourceEndpoint] = new UdpSourceRoute(
+                publisherSessionId,
+                sourceEndpoint,
+                videoTargets,
+                poseTargets,
+                audioTargets,
+                telemetryLowRateTargets,
+                telemetryHighRateTargets,
+                videoIngressLink,
+                poseIngressLink,
+                audioIngressLink,
+                telemetryLowRateIngressLink,
+                telemetryHighRateIngressLink);
         }
 
         public void RebuildForwardingForSubscriber(string subscriberSessionId)
@@ -171,22 +192,55 @@ namespace GrpcHttp3Demo.Sessions
             if (vrEndpoint != null && robotEndpoint != null && !string.IsNullOrEmpty(vrSessionId) && !string.IsNullOrEmpty(robotSessionId))
             {
                 var counter = _forwardingMetrics.GetOrCreateEdge(vrSessionId, robotSessionId);
-                _memory.FeedbackRoute[vrEndpoint] = new UdpFeedbackForwardTarget(robotEndpoint, robotSessionId, counter);
+                var ingressLink = _linkMetrics.GetOrCreateIngressLink(vrSessionId, UdpLinkMediaKind.Feedback);
+                var egressLink = _linkMetrics.GetOrCreateEgressLink(vrSessionId, robotSessionId, UdpLinkMediaKind.Feedback);
+                _memory.FeedbackRoute[vrEndpoint] = new UdpFeedbackForwardTarget(robotEndpoint, robotSessionId, counter, ingressLink, egressLink);
             }
         }
 
-        public void RemoveFeedbackRoute(string sessionId)
+        public void RemoveFeedbackRoute(string sessionId, string? partnerSessionOverride = null)
         {
-            if (_memory.Sessions.TryGetValue(sessionId, out var session) && session.UdpEndpoint != null)
+            var partnerSessionId = partnerSessionOverride;
+            if (string.IsNullOrEmpty(partnerSessionId))
             {
-                _memory.FeedbackRoute.TryRemove(session.UdpEndpoint, out _);
+                _memory.Pairings.TryGetValue(sessionId, out partnerSessionId);
             }
 
-            if (_memory.Pairings.TryGetValue(sessionId, out var partnerSessionId) &&
-                _memory.Sessions.TryGetValue(partnerSessionId, out var partner) &&
-                partner.UdpEndpoint != null)
+            if (!string.IsNullOrEmpty(partnerSessionId) &&
+                _memory.Sessions.TryGetValue(sessionId, out var session) &&
+                _memory.Sessions.TryGetValue(partnerSessionId, out var partner))
             {
-                _memory.FeedbackRoute.TryRemove(partner.UdpEndpoint, out _);
+                string? vrSessionId = null;
+                string? robotSessionId = null;
+
+                if (session.Role == RegisterRequest.Types.EndpointType.Vr && partner.Role == RegisterRequest.Types.EndpointType.Robot)
+                {
+                    vrSessionId = sessionId;
+                    robotSessionId = partnerSessionId;
+                }
+                else if (session.Role == RegisterRequest.Types.EndpointType.Robot && partner.Role == RegisterRequest.Types.EndpointType.Vr)
+                {
+                    vrSessionId = partnerSessionId;
+                    robotSessionId = sessionId;
+                }
+
+                if (!string.IsNullOrEmpty(vrSessionId) && !string.IsNullOrEmpty(robotSessionId))
+                {
+                    _linkMetrics.DeactivateLink(new UdpLinkKey(vrSessionId, vrSessionId, UdpLinkMetricsService.ServerNodeId, UdpLinkDirection.Ingress, UdpLinkMediaKind.Feedback));
+                    _linkMetrics.DeactivateLink(new UdpLinkKey(vrSessionId, UdpLinkMetricsService.ServerNodeId, robotSessionId, UdpLinkDirection.Egress, UdpLinkMediaKind.Feedback));
+                }
+            }
+
+            if (_memory.Sessions.TryGetValue(sessionId, out var currentSession) && currentSession.UdpEndpoint != null)
+            {
+                _memory.FeedbackRoute.TryRemove(currentSession.UdpEndpoint, out _);
+            }
+
+            if (!string.IsNullOrEmpty(partnerSessionId) &&
+                _memory.Sessions.TryGetValue(partnerSessionId, out var currentPartner) &&
+                currentPartner.UdpEndpoint != null)
+            {
+                _memory.FeedbackRoute.TryRemove(currentPartner.UdpEndpoint, out _);
             }
         }
     }

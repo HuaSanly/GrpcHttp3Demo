@@ -1,4 +1,5 @@
 using System.Net;
+using GrpcHttp3Demo.Communication.Udp.Metrics;
 using GrpcHttp3Demo.Models.Session;
 
 namespace GrpcHttp3Demo.Models.Udp
@@ -6,20 +7,22 @@ namespace GrpcHttp3Demo.Models.Udp
     public sealed class UdpSystemMonitorTarget
     {
         private long _nextDueTickMs;
-        private long _sequence;
+        private long _nextMonitorSequence;
 
-        public UdpSystemMonitorTarget(string sessionId, IPEndPoint endpoint, SystemMonitorTopicMask topics, int intervalMs)
+        public UdpSystemMonitorTarget(string sessionId, IPEndPoint endpoint, SystemMonitorTopicMask topics, int intervalMs, UdpRuntimeLink link)
         {
             SessionId = sessionId;
             Endpoint = endpoint;
             Topics = topics;
             IntervalMs = Math.Clamp(intervalMs, 250, 10_000);
+            Link = link;
         }
 
         public string SessionId { get; }
         public IPEndPoint Endpoint { get; }
         public SystemMonitorTopicMask Topics { get; }
         public int IntervalMs { get; }
+        public UdpRuntimeLink Link { get; }
 
         public bool TryMarkDue(long nowTickMs)
         {
@@ -34,7 +37,7 @@ namespace GrpcHttp3Demo.Models.Udp
 
         public long NextSequence()
         {
-            return Interlocked.Increment(ref _sequence);
+            return Interlocked.Increment(ref _nextMonitorSequence);
         }
     }
 }

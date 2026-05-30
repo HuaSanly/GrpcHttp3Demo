@@ -268,6 +268,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _telemetryHighRateThisSecond);
                     return;
                 case 0x07:
+                case 0x08:
                     Interlocked.Increment(ref _systemTotal);
                     Interlocked.Increment(ref _systemThisSecond);
                     return;
@@ -332,6 +333,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _txTelemetryHighRateThisSecond);
                     return;
                 case 0x07:
+                case 0x08:
                     Interlocked.Increment(ref _txSystemTotal);
                     Interlocked.Increment(ref _txSystemThisSecond);
                     return;
@@ -384,6 +386,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _txOkTelemetryHighRateThisSecond);
                     return;
                 case 0x07:
+                case 0x08:
                     Interlocked.Increment(ref _txOkSystemTotal);
                     Interlocked.Increment(ref _txOkSystemThisSecond);
                     return;
@@ -442,6 +445,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _txFailTelemetryHighRateThisSecond);
                     return;
                 case 0x07:
+                case 0x08:
                     Interlocked.Increment(ref _txFailSystemTotal);
                     Interlocked.Increment(ref _txFailSystemThisSecond);
                     return;
@@ -492,6 +496,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     Interlocked.Increment(ref _fwdQueueDropTelemetryHighRateThisSecond);
                     return;
                 case 0x07:
+                case 0x08:
                     Interlocked.Increment(ref _fwdQueueDropSystemTotal);
                     Interlocked.Increment(ref _fwdQueueDropSystemThisSecond);
                     return;

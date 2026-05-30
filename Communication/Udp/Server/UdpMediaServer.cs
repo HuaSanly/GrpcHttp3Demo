@@ -22,6 +22,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private readonly SessionMemoryStore _memory;
         private readonly UdpSessionBindingService _udpBindings;
         private readonly UdpMetricsService _metrics;
+        private readonly UdpLinkMetricsService _linkMetrics;
         private readonly SignalingMetricsService _signalingMetrics;
         private readonly SessionPresence _presence;
         private readonly SessionLivenessOptions _livenessOptions;
@@ -33,20 +34,24 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private readonly UdpForwardingSendMode _sendMode;
         private UdpPerTargetSendQueue? _sendQueue;
         private UdpSendDispatcher? _sendDispatcher;
+        private UdpSendDispatcher? _monitorSendDispatcher;
 
         // Optional data-plane keepalive ack (DACK): per remote endpoint, at most once per 5 seconds.
         private static readonly byte[] DackBytes = "DACK"u8.ToArray();
         private static readonly byte[] AckBytes = "ACK"u8.ToArray();
         private static readonly byte[] PongBytes = "PONG"u8.ToArray();
         private const byte SystemMonitorPrefix = 0x07;
+        private const byte TopologyMonitorPrefix = 0x08;
         private const long DataActivityUpdateIntervalMs = 1000;
         private const long DackIntervalMs = 5000;
+        private const int DefaultMonitorQueueCapacity = 128;
 
-        public UdpMediaServer(SessionMemoryStore memory, UdpSessionBindingService udpBindings, UdpMetricsService metrics, SignalingMetricsService signalingMetrics, SessionPresence presence, SessionLivenessOptions livenessOptions, ILogger<UdpMediaServer> logger, IConfiguration configuration)
+        public UdpMediaServer(SessionMemoryStore memory, UdpSessionBindingService udpBindings, UdpMetricsService metrics, UdpLinkMetricsService linkMetrics, SignalingMetricsService signalingMetrics, SessionPresence presence, SessionLivenessOptions livenessOptions, ILogger<UdpMediaServer> logger, IConfiguration configuration)
         {
             _memory = memory;
             _udpBindings = udpBindings;
             _metrics = metrics;
+            _linkMetrics = linkMetrics;
             _signalingMetrics = signalingMetrics;
             _presence = presence;
             _livenessOptions = livenessOptions;
@@ -84,6 +89,18 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
 
             // Control-plane replies keep the small 256-packet micro-buffer. Media uses the selected send mode.
             _sendDispatcher = new UdpSendDispatcher(_udpSocket, _metrics, _logger, _forwardingOptions);
+            var monitorQueueCapacity = Math.Clamp(
+                _forwardingOptions.QueueCapacityPerTarget > 0 ? Math.Min(_forwardingOptions.QueueCapacityPerTarget, DefaultMonitorQueueCapacity) : DefaultMonitorQueueCapacity,
+                16,
+                1024);
+            _monitorSendDispatcher = new UdpSendDispatcher(
+                _udpSocket,
+                _metrics,
+                _logger,
+                _forwardingOptions,
+                capacity: monitorQueueCapacity,
+                workerName: "UdpMonitorSendWorker",
+                queueFullLogMessage: "UDP monitor queue full; dropping 0x07/0x08 packet to protect media plane.");
             _sendQueue = _sendMode == UdpForwardingSendMode.PerTargetQueue
                 ? new UdpPerTargetSendQueue(_udpSocket, _metrics, _logger, _forwardingOptions)
                 : null;
@@ -127,6 +144,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 {
                     await _sendDispatcher.StopAsync();
                 }
+
+                if (_monitorSendDispatcher != null)
+                {
+                    await _monitorSendDispatcher.StopAsync();
+                }
             }
         }
 
@@ -138,6 +160,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 {
                     var now = Environment.TickCount64;
                     var targets = _memory.SystemMonitorTargets;
+                    var linkTargets = _memory.LinkMonitorTargets;
                     object? udpSnapshot = null;
                     object? signalingSnapshot = null;
                     object? onlineSnapshot = null;
@@ -149,14 +172,28 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                         var target = targets[i];
                         if (!target.TryMarkDue(now)) continue;
 
-                        var payload = BuildSystemMonitorPayload(
-                            target,
-                            ref udpSnapshot,
-                            ref signalingSnapshot,
-                            ref onlineSnapshot,
-                            ref runtimeTablesSnapshot,
-                            ref topicNamesCache);
-                        SendSystemMonitor(target.Endpoint, payload);
+                        if ((target.Topics & SystemMonitorTopicMask.Standard) != 0)
+                        {
+                            var payload = BuildSystemMonitorPayload(
+                                target,
+                                ref udpSnapshot,
+                                ref signalingSnapshot,
+                                ref onlineSnapshot,
+                                ref runtimeTablesSnapshot,
+                                ref topicNamesCache);
+                            target.Link.RecordForwardPlanned(payload.Length);
+                            EnqueueMonitor(target, payload, SystemMonitorPrefix, target.Link);
+                        }
+                    }
+
+                    for (var i = 0; i < linkTargets.Length; i++)
+                    {
+                        var target = linkTargets[i];
+                        if (!target.TryMarkDue(now)) continue;
+
+                        var payload = BuildTopologyMonitorPayload(target);
+                        target.Link.RecordForwardPlanned(payload.Length);
+                        EnqueueMonitor(target.Endpoint, payload, TopologyMonitorPrefix, target.Link);
                     }
                 }
                 catch (Exception ex)
@@ -176,29 +213,30 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             ref object? runtimeTablesSnapshot,
             ref Dictionary<SystemMonitorTopicMask, string[]>? topicNamesCache)
         {
+            var payloadTopics = target.Topics & SystemMonitorTopicMask.Standard;
             topicNamesCache ??= new Dictionary<SystemMonitorTopicMask, string[]>();
-            if (!topicNamesCache.TryGetValue(target.Topics, out var topics))
+            if (!topicNamesCache.TryGetValue(payloadTopics, out var topics))
             {
-                topics = SessionSubscription.ToTopicNames(target.Topics);
-                topicNamesCache[target.Topics] = topics;
+                topics = SessionSubscription.ToTopicNames(payloadTopics);
+                topicNamesCache[payloadTopics] = topics;
             }
 
-            if ((target.Topics & SystemMonitorTopicMask.UdpGlobal) != 0 && udpSnapshot == null)
+            if ((payloadTopics & SystemMonitorTopicMask.UdpGlobal) != 0 && udpSnapshot == null)
             {
                 udpSnapshot = _metrics.Snapshot();
             }
 
-            if ((target.Topics & SystemMonitorTopicMask.SignalingRates) != 0 && signalingSnapshot == null)
+            if ((payloadTopics & SystemMonitorTopicMask.SignalingRates) != 0 && signalingSnapshot == null)
             {
                 signalingSnapshot = _signalingMetrics.Snapshot();
             }
 
-            if ((target.Topics & SystemMonitorTopicMask.OnlineSummary) != 0 && onlineSnapshot == null)
+            if ((payloadTopics & SystemMonitorTopicMask.OnlineSummary) != 0 && onlineSnapshot == null)
             {
                 onlineSnapshot = _presence.GetOnlineRoleSnapshot(_livenessOptions.Timeout);
             }
 
-            if ((target.Topics & SystemMonitorTopicMask.RuntimeTables) != 0 && runtimeTablesSnapshot == null)
+            if ((payloadTopics & SystemMonitorTopicMask.RuntimeTables) != 0 && runtimeTablesSnapshot == null)
             {
                 runtimeTablesSnapshot = _memory.Snapshot();
             }
@@ -211,10 +249,10 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 targetSessionId = target.SessionId,
                 prefix = "0x07",
                 topics,
-                udp = (target.Topics & SystemMonitorTopicMask.UdpGlobal) != 0 ? udpSnapshot : null,
-                signaling = (target.Topics & SystemMonitorTopicMask.SignalingRates) != 0 ? signalingSnapshot : null,
-                online = (target.Topics & SystemMonitorTopicMask.OnlineSummary) != 0 ? onlineSnapshot : null,
-                runtimeTables = (target.Topics & SystemMonitorTopicMask.RuntimeTables) != 0 ? runtimeTablesSnapshot : null
+                udp = (payloadTopics & SystemMonitorTopicMask.UdpGlobal) != 0 ? udpSnapshot : null,
+                signaling = (payloadTopics & SystemMonitorTopicMask.SignalingRates) != 0 ? signalingSnapshot : null,
+                online = (payloadTopics & SystemMonitorTopicMask.OnlineSummary) != 0 ? onlineSnapshot : null,
+                runtimeTables = (payloadTopics & SystemMonitorTopicMask.RuntimeTables) != 0 ? runtimeTablesSnapshot : null
             };
 
             var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(envelope);
@@ -224,21 +262,72 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             return payload;
         }
 
-        private void SendSystemMonitor(IPEndPoint endpoint, byte[] payload)
+        private byte[] BuildTopologyMonitorPayload(UdpLinkMonitorTarget target)
+        {
+            var linkSnapshot = _linkMetrics.SnapshotByLinkId(target.LinkId, activeOnly: true);
+
+            var envelope = new
+            {
+                sequence = target.NextSequence(),
+                serverTimeUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                publisherSessionId = SystemPublishers.LinkMonitorPublisherSessionId,
+                targetSessionId = target.SessionId,
+                prefix = "0x08",
+                topics = new[] { "udp_link_metrics" },
+                linksUpdatedUtc = _linkMetrics.LastTickUtc,
+                activeOnly = true,
+                subscribedLinkId = target.LinkId,
+                links = linkSnapshot
+            };
+
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(envelope);
+            var payload = new byte[jsonBytes.Length + 1];
+            payload[0] = TopologyMonitorPrefix;
+            Buffer.BlockCopy(jsonBytes, 0, payload, 1, jsonBytes.Length);
+            return payload;
+        }
+
+        private void EnqueueMonitor(UdpSystemMonitorTarget target, byte[] payload, byte prefix, UdpRuntimeLink link)
+        {
+            if (_monitorSendDispatcher != null)
+            {
+                _monitorSendDispatcher.Enqueue(target.Endpoint, payload, prefix, link);
+                return;
+            }
+
+            SendMonitor(target.Endpoint, payload, prefix, link);
+        }
+
+        private void EnqueueMonitor(IPEndPoint endpoint, byte[] payload, byte prefix, UdpRuntimeLink link)
+        {
+            if (_monitorSendDispatcher != null)
+            {
+                _monitorSendDispatcher.Enqueue(endpoint, payload, prefix, link);
+                return;
+            }
+
+            SendMonitor(endpoint, payload, prefix, link);
+        }
+
+        private void SendMonitor(EndPoint endpoint, byte[] payload, byte prefix, UdpRuntimeLink link)
         {
             try
             {
-                _metrics.RecordTxAttempt(payload.Length, SystemMonitorPrefix);
+                _metrics.RecordTxAttempt(payload.Length, prefix);
+                link.RecordSendAttempt(payload.Length);
                 _udpSocket.SendTo(payload, SocketFlags.None, endpoint);
-                _metrics.RecordTxSuccess(payload.Length, SystemMonitorPrefix);
+                _metrics.RecordTxSuccess(payload.Length, prefix);
+                link.RecordSendSuccess(payload.Length);
             }
             catch (SocketException ex)
             {
-                _metrics.RecordTxFailure(payload.Length, SystemMonitorPrefix, ex.SocketErrorCode);
+                _metrics.RecordTxFailure(payload.Length, prefix, ex.SocketErrorCode);
+                link.RecordSendFailure(payload.Length, ex.SocketErrorCode);
             }
             catch (Exception)
             {
-                _metrics.RecordTxFailure(payload.Length, SystemMonitorPrefix, SocketError.SocketError);
+                _metrics.RecordTxFailure(payload.Length, prefix, SocketError.SocketError);
+                link.RecordSendFailure(payload.Length, SocketError.SocketError);
             }
         }
 
@@ -268,17 +357,29 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                             continue;
 
                         case 0x03:
-                            if (_memory.TryGetFeedbackForward(remoteEp, out var robotEp, out var counter) && robotEp != null)
+                            if (_memory.TryGetFeedbackForward(remoteEp, out var feedbackTarget))
                             {
-                                counter?.RecordFeedback(length);
+                                feedbackTarget.IngressLink.RecordReceived(length);
+                                feedbackTarget.IngressLink.RecordRouteMatched(length);
+                                feedbackTarget.EgressLink.RecordForwardPlanned(length);
+                                feedbackTarget.Counter.RecordFeedback(length);
                                 byte[]? queuedPayload = null;
-                                SendMedia(robotEp, buffer, length, prefix, ref queuedPayload);
+                                SendMedia(feedbackTarget.RobotEndpoint, buffer, length, prefix, feedbackTarget.EgressLink, ref queuedPayload);
+                            }
+                            else
+                            {
+                                RecordIngressRouteMiss(remoteEp, UdpLinkMediaKind.Feedback, length, UdpLinkFailureKind.NoRoute);
                             }
                             continue;
                     }
 
                     if (!_memory.TryGetSourceRoute(remoteEp, out var route) || route == null)
                     {
+                        if (TryMapMediaKind(prefix, out var missingMediaKind))
+                        {
+                            RecordIngressRouteMiss(remoteEp, missingMediaKind, length, UdpLinkFailureKind.NoRoute);
+                        }
+
                         continue;
                     }
 
@@ -286,14 +387,23 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                     if (prefix == 0x01)
                     {
                         RecordDataActivityAndMaybeDack(route, remoteEp);
+                        route.VideoIngressLink.RecordReceived(length);
 
                         var targets = route.VideoTargets;
+                        if (targets.Length == 0)
+                        {
+                            route.VideoIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
+                            continue;
+                        }
+
+                        route.VideoIngressLink.RecordRouteMatched(length);
                         byte[]? queuedPayload = null;
                         for (var i = 0; i < targets.Length; i++)
                         {
                             var dest = targets[i];
                             dest.Counter.RecordVideo(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                            dest.Link.RecordForwardPlanned(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
                         }
 
                         continue;
@@ -303,14 +413,23 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                     if (prefix == 0x02)
                     {
                         RecordDataActivityAndMaybeDack(route, remoteEp);
+                        route.PoseIngressLink.RecordReceived(length);
 
                         var targets = route.PoseTargets;
+                        if (targets.Length == 0)
+                        {
+                            route.PoseIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
+                            continue;
+                        }
+
+                        route.PoseIngressLink.RecordRouteMatched(length);
                         byte[]? queuedPayload = null;
                         for (var i = 0; i < targets.Length; i++)
                         {
                             var dest = targets[i];
                             dest.Counter.RecordPose(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                            dest.Link.RecordForwardPlanned(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
                         }
 
                         continue;
@@ -320,14 +439,23 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                     if (prefix == 0x04)
                     {
                         RecordDataActivityAndMaybeDack(route, remoteEp);
+                        route.AudioIngressLink.RecordReceived(length);
 
                         var targets = route.AudioTargets;
+                        if (targets.Length == 0)
+                        {
+                            route.AudioIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
+                            continue;
+                        }
+
+                        route.AudioIngressLink.RecordRouteMatched(length);
                         byte[]? queuedPayload = null;
                         for (var i = 0; i < targets.Length; i++)
                         {
                             var dest = targets[i];
                             dest.Counter.RecordAudio(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                            dest.Link.RecordForwardPlanned(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
                         }
 
                         continue;
@@ -337,14 +465,23 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                     if (prefix == 0x05)
                     {
                         RecordDataActivityAndMaybeDack(route, remoteEp);
+                        route.TelemetryLowRateIngressLink.RecordReceived(length);
 
                         var targets = route.TelemetryLowRateTargets;
+                        if (targets.Length == 0)
+                        {
+                            route.TelemetryLowRateIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
+                            continue;
+                        }
+
+                        route.TelemetryLowRateIngressLink.RecordRouteMatched(length);
                         byte[]? queuedPayload = null;
                         for (var i = 0; i < targets.Length; i++)
                         {
                             var dest = targets[i];
                             dest.Counter.RecordTelemetry(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                            dest.Link.RecordForwardPlanned(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
                         }
 
                         continue;
@@ -354,14 +491,23 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                     if (prefix == 0x06)
                     {
                         RecordDataActivityAndMaybeDack(route, remoteEp);
+                        route.TelemetryHighRateIngressLink.RecordReceived(length);
 
                         var targets = route.TelemetryHighRateTargets;
+                        if (targets.Length == 0)
+                        {
+                            route.TelemetryHighRateIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
+                            continue;
+                        }
+
+                        route.TelemetryHighRateIngressLink.RecordRouteMatched(length);
                         byte[]? queuedPayload = null;
                         for (var i = 0; i < targets.Length; i++)
                         {
                             var dest = targets[i];
                             dest.Counter.RecordTelemetry(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, ref queuedPayload);
+                            dest.Link.RecordForwardPlanned(length);
+                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
                         }
 
                         continue;
@@ -382,11 +528,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             }
         }
 
-        private void SendMedia(IPEndPoint endpoint, byte[] buffer, int length, byte prefix, ref byte[]? queuedPayload)
+        private void SendMedia(IPEndPoint endpoint, byte[] buffer, int length, byte prefix, UdpRuntimeLink link, ref byte[]? queuedPayload)
         {
             if (_sendMode == UdpForwardingSendMode.Direct)
             {
-                SendDirect(endpoint, buffer, length, prefix);
+                SendDirect(endpoint, buffer, length, prefix, link);
                 return;
             }
 
@@ -394,28 +540,32 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
 
             if (_sendMode == UdpForwardingSendMode.PerTargetQueue && _sendQueue != null)
             {
-                _sendQueue.Enqueue(endpoint, queuedPayload, prefix);
+                _sendQueue.Enqueue(endpoint, queuedPayload, prefix, link);
                 return;
             }
 
-            _sendDispatcher?.Enqueue(endpoint, queuedPayload, prefix);
+            _sendDispatcher?.Enqueue(endpoint, queuedPayload, prefix, link);
         }
 
-        private void SendDirect(IPEndPoint endpoint, byte[] buffer, int length, byte prefix)
+        private void SendDirect(IPEndPoint endpoint, byte[] buffer, int length, byte prefix, UdpRuntimeLink link)
         {
             try
             {
                 _metrics.RecordTxAttempt(length, prefix);
+                link.RecordSendAttempt(length);
                 _udpSocket.SendTo(buffer, 0, length, SocketFlags.None, endpoint);
                 _metrics.RecordTxSuccess(length, prefix);
+                link.RecordSendSuccess(length);
             }
             catch (SocketException ex)
             {
                 _metrics.RecordTxFailure(length, prefix, ex.SocketErrorCode);
+                link.RecordSendFailure(length, ex.SocketErrorCode);
             }
             catch (Exception)
             {
                 _metrics.RecordTxFailure(length, prefix, SocketError.SocketError);
+                link.RecordSendFailure(length, SocketError.SocketError);
             }
         }
 
@@ -437,6 +587,47 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             if (route.TryMarkDackDue(now, DackIntervalMs))
             {
                 _sendDispatcher?.Enqueue(remoteEp, DackBytes, DackBytes[0]);
+            }
+        }
+
+        private void RecordIngressRouteMiss(IPEndPoint remoteEp, UdpLinkMediaKind mediaKind, int length, UdpLinkFailureKind reason)
+        {
+            var sessionId = _memory.GetSessionByEndpoint(remoteEp);
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            var link = _linkMetrics.GetOrCreateIngressLink(sessionId, mediaKind);
+            link.RecordReceived(length);
+            link.RecordRouteMiss(length, reason);
+        }
+
+        private static bool TryMapMediaKind(byte prefix, out UdpLinkMediaKind mediaKind)
+        {
+            switch (prefix)
+            {
+                case 0x01:
+                    mediaKind = UdpLinkMediaKind.Video;
+                    return true;
+                case 0x02:
+                    mediaKind = UdpLinkMediaKind.Pose;
+                    return true;
+                case 0x03:
+                    mediaKind = UdpLinkMediaKind.Feedback;
+                    return true;
+                case 0x04:
+                    mediaKind = UdpLinkMediaKind.Audio;
+                    return true;
+                case 0x05:
+                    mediaKind = UdpLinkMediaKind.TelemetryLowRate;
+                    return true;
+                case 0x06:
+                    mediaKind = UdpLinkMediaKind.TelemetryHighRate;
+                    return true;
+                default:
+                    mediaKind = default;
+                    return false;
             }
         }
 

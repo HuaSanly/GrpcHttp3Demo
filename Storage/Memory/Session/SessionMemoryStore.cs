@@ -26,6 +26,7 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         private readonly ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> _feedbackRoute = new();
         private readonly ConcurrentDictionary<string, byte[]> _p2pSharedKeys = new();
         private UdpSystemMonitorTarget[] _systemMonitorTargets = Array.Empty<UdpSystemMonitorTarget>();
+        private UdpLinkMonitorTarget[] _linkMonitorTargets = Array.Empty<UdpLinkMonitorTarget>();
 
         internal ConcurrentDictionary<string, DeviceContext> Sessions => _sessions;
         internal ConcurrentDictionary<IPEndPoint, string> EndpointIndex => _endpointIndex;
@@ -44,10 +45,16 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         internal ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> FeedbackRoute => _feedbackRoute;
         internal ConcurrentDictionary<string, byte[]> P2pSharedKeys => _p2pSharedKeys;
         internal UdpSystemMonitorTarget[] SystemMonitorTargets => Volatile.Read(ref _systemMonitorTargets);
+        internal UdpLinkMonitorTarget[] LinkMonitorTargets => Volatile.Read(ref _linkMonitorTargets);
 
         internal void SetSystemMonitorTargets(UdpSystemMonitorTarget[] targets)
         {
             Volatile.Write(ref _systemMonitorTargets, targets);
+        }
+
+        internal void SetLinkMonitorTargets(UdpLinkMonitorTarget[] targets)
+        {
+            Volatile.Write(ref _linkMonitorTargets, targets);
         }
 
         public DeviceContext? GetSession(string sessionId)
@@ -98,18 +105,13 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
             return _sourceRouteTable.TryGetValue(sourceEndpoint, out route);
         }
 
-        public bool TryGetFeedbackForward(IPEndPoint vrEndpoint, out IPEndPoint? robotEndpoint, out ForwardEdgeCounter? counter)
+        public bool TryGetFeedbackForward(IPEndPoint vrEndpoint, out UdpFeedbackForwardTarget target)
         {
-            robotEndpoint = null;
-            counter = null;
-
-            if (!_feedbackRoute.TryGetValue(vrEndpoint, out var target))
+            if (!_feedbackRoute.TryGetValue(vrEndpoint, out target))
             {
+                target = default;
                 return false;
             }
-
-            robotEndpoint = target.RobotEndpoint;
-            counter = target.Counter;
             return true;
         }
 
@@ -131,6 +133,7 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
                 telemetryHighRateForwardingTable = _telemetryHighRateForwardingTable.Count,
                 sourceRouteTable = _sourceRouteTable.Count,
                 systemMonitorTargets = SystemMonitorTargets.Length,
+                linkMonitorTargets = LinkMonitorTargets.Length,
                 feedbackRoute = _feedbackRoute.Count,
                 p2pSharedKeys = _p2pSharedKeys.Count
             };

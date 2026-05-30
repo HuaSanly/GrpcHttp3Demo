@@ -57,6 +57,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Binding
             _routing.RebuildForwardingForPublisher(sessionId);
             _routing.RebuildForwardingForSubscriber(sessionId);
             _subscriptions.RebuildSystemMonitorTargets();
+            _subscriptions.RebuildLinkMonitorTargets();
 
             Console.WriteLine($"[UDP] Registered endpoint: session {sessionId} -> {endpoint}");
         }
@@ -95,8 +96,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Binding
                     _memory.FeedbackRoute.TryRemove(oldEndpoint, out _);
                 }
 
+                _routing.RemoveFeedbackRoute(sessionId);
+
                 _memory.SessionEndpointIndex.TryRemove(sessionId, out _);
                 _subscriptions.RebuildSystemMonitorTargets();
+                _subscriptions.RebuildLinkMonitorTargets();
 
                 if (!_pushChannels.IsConnected(sessionId)) continue;
                 if (context.UdpRescueCount >= maxRescues) continue;

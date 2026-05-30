@@ -10,5 +10,6 @@ namespace GrpcHttp3Demo.Models.Session
         public bool SubTelemetryHighRate { get; set; }
         public SystemMonitorTopicMask SystemMonitorTopics { get; set; }
         public int SystemMonitorIntervalMs { get; set; } = 1000;
+        public string? SystemMonitorUdpLinkId { get; set; }
     }
 }

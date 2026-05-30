@@ -137,12 +137,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         public IPEndPoint Endpoint { get; }
         public string TargetSessionId { get; }
         public ForwardEdgeCounter Counter { get; }
+        public UdpRuntimeLink Link { get; }
 
-        public UdpForwardTarget(IPEndPoint endpoint, string targetSessionId, ForwardEdgeCounter counter)
+        public UdpForwardTarget(IPEndPoint endpoint, string targetSessionId, ForwardEdgeCounter counter, UdpRuntimeLink link)
         {
             Endpoint = endpoint;
             TargetSessionId = targetSessionId;
             Counter = counter;
+            Link = link;
         }
     }
 
@@ -151,12 +153,16 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         public IPEndPoint RobotEndpoint { get; }
         public string RobotSessionId { get; }
         public ForwardEdgeCounter Counter { get; }
+        public UdpRuntimeLink IngressLink { get; }
+        public UdpRuntimeLink EgressLink { get; }
 
-        public UdpFeedbackForwardTarget(IPEndPoint robotEndpoint, string robotSessionId, ForwardEdgeCounter counter)
+        public UdpFeedbackForwardTarget(IPEndPoint robotEndpoint, string robotSessionId, ForwardEdgeCounter counter, UdpRuntimeLink ingressLink, UdpRuntimeLink egressLink)
         {
             RobotEndpoint = robotEndpoint;
             RobotSessionId = robotSessionId;
             Counter = counter;
+            IngressLink = ingressLink;
+            EgressLink = egressLink;
         }
     }
 
@@ -172,7 +178,12 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             ImmutableArray<UdpForwardTarget> poseTargets,
             ImmutableArray<UdpForwardTarget> audioTargets,
             ImmutableArray<UdpForwardTarget> telemetryLowRateTargets,
-            ImmutableArray<UdpForwardTarget> telemetryHighRateTargets)
+            ImmutableArray<UdpForwardTarget> telemetryHighRateTargets,
+            UdpRuntimeLink videoIngressLink,
+            UdpRuntimeLink poseIngressLink,
+            UdpRuntimeLink audioIngressLink,
+            UdpRuntimeLink telemetryLowRateIngressLink,
+            UdpRuntimeLink telemetryHighRateIngressLink)
         {
             SourceSessionId = sourceSessionId;
             SourceEndpoint = sourceEndpoint;
@@ -181,6 +192,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             AudioTargets = audioTargets;
             TelemetryLowRateTargets = telemetryLowRateTargets;
             TelemetryHighRateTargets = telemetryHighRateTargets;
+            VideoIngressLink = videoIngressLink;
+            PoseIngressLink = poseIngressLink;
+            AudioIngressLink = audioIngressLink;
+            TelemetryLowRateIngressLink = telemetryLowRateIngressLink;
+            TelemetryHighRateIngressLink = telemetryHighRateIngressLink;
         }
 
         public string SourceSessionId { get; }
@@ -190,6 +206,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         public ImmutableArray<UdpForwardTarget> AudioTargets { get; }
         public ImmutableArray<UdpForwardTarget> TelemetryLowRateTargets { get; }
         public ImmutableArray<UdpForwardTarget> TelemetryHighRateTargets { get; }
+        public UdpRuntimeLink VideoIngressLink { get; }
+        public UdpRuntimeLink PoseIngressLink { get; }
+        public UdpRuntimeLink AudioIngressLink { get; }
+        public UdpRuntimeLink TelemetryLowRateIngressLink { get; }
+        public UdpRuntimeLink TelemetryHighRateIngressLink { get; }
 
         public bool TryMarkDataActivityDue(long nowTickMs, long intervalMs)
         {

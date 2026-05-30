@@ -10,6 +10,7 @@ namespace GrpcHttp3Demo.Communication.Udp
         {
             services.AddSingleton<UdpMetricsService>();
             services.AddSingleton<UdpForwardingMetricsService>();
+            services.AddSingleton<UdpLinkMetricsService>();
             services.AddSingleton<UdpSessionBindingService>();
             services.AddHostedService<UdpMediaServer>();
             return services;

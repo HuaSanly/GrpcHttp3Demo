@@ -30,12 +30,13 @@ namespace GrpcHttp3Demo.Communication.Udp.Sending
             _options = options;
         }
 
-        public void Enqueue(IPEndPoint destination, byte[] buffer, byte prefix)
+        public void Enqueue(IPEndPoint destination, byte[] buffer, byte prefix, UdpRuntimeLink link)
         {
             var q = _queues.GetOrAdd(destination, ep => TargetQueue.Create(ep, _socket, _metrics, _logger, _options));
-            if (!q.TryEnqueue(buffer, prefix))
+            if (!q.TryEnqueue(buffer, prefix, link))
             {
                 _metrics.RecordForwardQueueDrop(buffer.Length, prefix);
+                link.RecordQueueDropped(buffer.Length);
 
                 // Rate-limit warning to avoid log storms.
                 var now = Environment.TickCount64;
@@ -44,7 +45,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Sending
                 {
                     _logger.LogWarning("UDP forward queue full; dropping packets. Consider increasing MediaServer:UdpForwarding:QueueCapacityPerTarget or enabling pacing.");
                 }
+
+                return;
             }
+
+            link.RecordQueueEnqueued(buffer.Length);
         }
 
         public async Task StopAsync()
@@ -97,11 +102,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Sending
                 return new TargetQueue(destination, socket, metrics, logger, options, channel);
             }
 
-            public bool TryEnqueue(byte[] buffer, byte prefix)
+            public bool TryEnqueue(byte[] buffer, byte prefix, UdpRuntimeLink link)
             {
                 // Safe to share the received datagram buffer across multiple targets as long as we never mutate it.
                 // This avoids per-target allocations under high bitrate.
-                return _channel.Writer.TryWrite(new SendItem(buffer, prefix));
+                return _channel.Writer.TryWrite(new SendItem(buffer, prefix, link));
             }
 
             public void Complete() => _channel.Writer.TryComplete();
@@ -168,19 +173,23 @@ namespace GrpcHttp3Demo.Communication.Udp.Sending
                     try
                     {
                         _metrics.RecordTxAttempt(item.Payload.Length, item.Prefix);
+                        item.Link.RecordSendAttempt(item.Payload.Length);
                         await _socket.SendToAsync(item.Payload, SocketFlags.None, _destination);
                         _metrics.RecordTxSuccess(item.Payload.Length, item.Prefix);
+                        item.Link.RecordSendSuccess(item.Payload.Length);
                         return;
                     }
                     catch (SocketException ex)
                     {
                         var code = ex.SocketErrorCode;
                         _metrics.RecordTxFailure(item.Payload.Length, item.Prefix, code);
+                        item.Link.RecordSendFailure(item.Payload.Length, code);
 
                         var retryable = _options.RetryOnNoBuffer && code == SocketError.NoBufferSpaceAvailable;
                         if (retryable && attempt < maxRetries)
                         {
                             _metrics.RecordTxRetry(item.Payload.Length, item.Prefix, code);
+                            item.Link.RecordRetry(item.Payload.Length);
                             await Task.Delay(retryDelayMs);
                             continue;
                         }
@@ -197,13 +206,14 @@ namespace GrpcHttp3Demo.Communication.Udp.Sending
                     }
                     catch (Exception ex)
                     {
+                        item.Link.RecordSendFailure(item.Payload.Length, SocketError.SocketError);
                         _logger.LogError(ex, "UDP send failed to {Destination}", _destination);
                         return;
                     }
                 }
             }
 
-            private readonly record struct SendItem(byte[] Payload, byte Prefix);
+            private readonly record struct SendItem(byte[] Payload, byte Prefix, UdpRuntimeLink Link);
         }
     }
 }

@@ -90,8 +90,8 @@ namespace GrpcHttp3Demo.Sessions
             if (_memory.Sessions.TryGetValue(sessionId, out var context)) context.PairedDeviceId = null;
             if (_memory.Sessions.TryGetValue(partnerSessionId, out var partner)) partner.PairedDeviceId = null;
 
-            _routing.RemoveFeedbackRoute(sessionId);
-            _routing.RemoveFeedbackRoute(partnerSessionId);
+            _routing.RemoveFeedbackRoute(sessionId, partnerSessionId);
+            _routing.RemoveFeedbackRoute(partnerSessionId, sessionId);
             _routing.RebuildForwardingForPublisher(sessionId);
             _routing.RebuildForwardingForPublisher(partnerSessionId);
 

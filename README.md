@@ -37,6 +37,7 @@ dotnet run
 
 - [Readme/PROTOCOL_GRPC_SIGNALING.md](Readme/PROTOCOL_GRPC_SIGNALING.md)
 - [Readme/PROTOCOL_UDP_SYSTEM_MONITOR_0X07.md](Readme/PROTOCOL_UDP_SYSTEM_MONITOR_0X07.md)
+- [Readme/PROTOCOL_UDP_LINK_MONITOR_0X08.md](Readme/PROTOCOL_UDP_LINK_MONITOR_0X08.md)
 - [Readme/PROTOCOL_UDP_SIGNALING.md](Readme/PROTOCOL_UDP_SIGNALING.md)
 - [Readme/WPF_GRPC_CLIENT_GUIDE.md](Readme/WPF_GRPC_CLIENT_GUIDE.md)
 
@@ -199,3 +200,4 @@ GRANT ALL PRIVILEGES ON DATABASE grpc_http3_demo TO grpc_http3_app;
 - `/api/system/config`
 
 UDP 系统监控推送使用前缀 `0x07`，通过 `/api/client/monitor/subscriptions` 管理订阅。
+UDP 链路监控推送使用前缀 `0x08`，通过 `/api/client/monitor/link-subscriptions` 管理订阅。

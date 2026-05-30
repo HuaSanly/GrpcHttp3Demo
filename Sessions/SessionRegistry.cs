@@ -81,6 +81,7 @@ namespace GrpcHttp3Demo.Sessions
 
             _pushChannels.Detach(sessionId);
             _pairing.UnpairSession(sessionId);
+            _routing.RemoveFeedbackRoute(sessionId);
 
             if (context.UdpEndpoint != null)
             {
@@ -118,6 +119,7 @@ namespace GrpcHttp3Demo.Sessions
             }
 
             _subscriptions.RebuildSystemMonitorTargets();
+            _subscriptions.RebuildLinkMonitorTargets();
 
             Console.WriteLine($"[SessionRegistry] Unregistered session: {sessionId}");
         }

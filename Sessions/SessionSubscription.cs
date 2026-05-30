@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using GrpcHttp3Demo.Communication.Udp.Metrics;
 using GrpcHttp3Demo.Models.Session;
 using GrpcHttp3Demo.Models.Udp;
 using GrpcHttp3Demo.Storage.Memory.Session;
@@ -11,11 +12,13 @@ namespace GrpcHttp3Demo.Sessions
     {
         private readonly SessionMemoryStore _memory;
         private readonly SessionRouting _routing;
+        private readonly UdpLinkMetricsService _linkMetrics;
 
-        public SessionSubscription(SessionMemoryStore memory, SessionRouting routing)
+        public SessionSubscription(SessionMemoryStore memory, SessionRouting routing, UdpLinkMetricsService linkMetrics)
         {
             _memory = memory;
             _routing = routing;
+            _linkMetrics = linkMetrics;
         }
 
         public void UpdateSubscription(string publisherSessionId, string subscriberSessionId, bool isSub, bool subVideo, bool subPose, bool subAudio, bool subTelemetryLowRate, bool subTelemetryHighRate)
@@ -146,8 +149,71 @@ namespace GrpcHttp3Demo.Sessions
             return true;
         }
 
+        public bool TryUpdateLinkMonitorSubscription(string subscriberSessionId, bool isSub, int intervalMs, string? linkId, out string message)
+        {
+            if (!_memory.Sessions.TryGetValue(subscriberSessionId, out var subscriber))
+            {
+                message = $"Session not found: {subscriberSessionId}";
+                return false;
+            }
+
+            if (isSub && subscriber.UdpEndpoint == null)
+            {
+                message = $"Session has no UDP endpoint: {subscriberSessionId}";
+                return false;
+            }
+
+            var normalizedLinkId = NormalizeLinkId(linkId);
+            if (isSub && string.IsNullOrWhiteSpace(normalizedLinkId))
+            {
+                message = "Missing linkId";
+                return false;
+            }
+
+            if (isSub)
+            {
+                var effectiveIntervalMs = Math.Clamp(intervalMs, 250, 10_000);
+                var details = _memory.SubscriptionDetails.GetOrAdd(SystemPublishers.LinkMonitorPublisherSessionId, _ => new ConcurrentDictionary<string, SubscriptionDetail>());
+                details[subscriberSessionId] = new SubscriptionDetail
+                {
+                    SubscriberId = subscriberSessionId,
+                    SystemMonitorIntervalMs = effectiveIntervalMs,
+                    SystemMonitorUdpLinkId = normalizedLinkId
+                };
+
+                var meta = _memory.SubscriptionMeta.GetOrAdd(SystemPublishers.LinkMonitorPublisherSessionId, _ => new ConcurrentDictionary<string, SubscriptionMeta>());
+                meta[subscriberSessionId] = new SubscriptionMeta
+                {
+                    SubscriberId = subscriberSessionId,
+                    SystemMonitorIntervalMs = effectiveIntervalMs,
+                    SystemMonitorUdpLinkId = normalizedLinkId,
+                    LastUpdatedUtc = DateTime.UtcNow
+                };
+
+                RebuildLinkMonitorTargets();
+                message = "Subscribed";
+                return true;
+            }
+
+            if (_memory.SubscriptionDetails.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var currentDetails))
+            {
+                currentDetails.TryRemove(subscriberSessionId, out _);
+            }
+
+            if (_memory.SubscriptionMeta.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var currentMeta))
+            {
+                currentMeta.TryRemove(subscriberSessionId, out _);
+            }
+
+            RebuildLinkMonitorTargets();
+            message = "Unsubscribed";
+            return true;
+        }
+
         public void RebuildSystemMonitorTargets()
         {
+            _linkMetrics.DeactivateLinksForOrigin(SystemPublishers.MonitorPublisherSessionId);
+
             if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.MonitorPublisherSessionId, out var subscriptions))
             {
                 _memory.SetSystemMonitorTargets(Array.Empty<UdpSystemMonitorTarget>());
@@ -159,15 +225,46 @@ namespace GrpcHttp3Demo.Sessions
             {
                 if (item.SystemMonitorTopics == SystemMonitorTopicMask.None) continue;
                 if (!_memory.Sessions.TryGetValue(item.SubscriberId, out var subscriber) || subscriber.UdpEndpoint == null) continue;
+                var link = _linkMetrics.GetOrCreateSystemMonitorLink(item.SubscriberId);
 
                 targets.Add(new UdpSystemMonitorTarget(
                     item.SubscriberId,
                     subscriber.UdpEndpoint,
                     item.SystemMonitorTopics,
-                    item.SystemMonitorIntervalMs));
+                    item.SystemMonitorIntervalMs,
+                    link));
             }
 
             _memory.SetSystemMonitorTargets(targets.ToArray());
+        }
+
+        public void RebuildLinkMonitorTargets()
+        {
+            _linkMetrics.DeactivateLinksForOrigin(SystemPublishers.LinkMonitorPublisherSessionId);
+
+            if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var subscriptions))
+            {
+                _memory.SetLinkMonitorTargets(Array.Empty<UdpLinkMonitorTarget>());
+                return;
+            }
+
+            var targets = new List<UdpLinkMonitorTarget>(subscriptions.Count);
+            foreach (var item in subscriptions.Values)
+            {
+                if (!_memory.Sessions.TryGetValue(item.SubscriberId, out var subscriber) || subscriber.UdpEndpoint == null) continue;
+                var normalizedLinkId = NormalizeLinkId(item.SystemMonitorUdpLinkId);
+                if (string.IsNullOrWhiteSpace(normalizedLinkId)) continue;
+
+                var link = _linkMetrics.GetOrCreateTopologyMonitorLink(SystemPublishers.LinkMonitorPublisherSessionId, item.SubscriberId);
+                targets.Add(new UdpLinkMonitorTarget(
+                    item.SubscriberId,
+                    subscriber.UdpEndpoint,
+                    item.SystemMonitorIntervalMs,
+                    normalizedLinkId,
+                    link));
+            }
+
+            _memory.SetLinkMonitorTargets(targets.ToArray());
         }
 
         public IReadOnlyCollection<object> ListSystemMonitorSubscriptions()
@@ -187,20 +284,59 @@ namespace GrpcHttp3Demo.Sessions
                     subscriberDeviceId = subscriber?.DeviceId,
                     subscriberRole = subscriber?.Role.ToString(),
                     udpEndpoint = subscriber?.UdpEndpoint?.ToString(),
+                    prefixes = ToPrefixes(subscription.SystemMonitorTopics),
                     topics = ToTopicNames(subscription.SystemMonitorTopics),
                     intervalMs = Math.Clamp(subscription.SystemMonitorIntervalMs, 250, 10_000)
                 };
             }).ToArray<object>();
         }
 
+        public IReadOnlyCollection<object> ListLinkMonitorSubscriptions()
+        {
+            if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var subscriptions))
+            {
+                return Array.Empty<object>();
+            }
+
+            return subscriptions.Values.Select(subscription =>
+            {
+                _memory.Sessions.TryGetValue(subscription.SubscriberId, out var subscriber);
+                return new
+                {
+                    publisherSessionId = SystemPublishers.LinkMonitorPublisherSessionId,
+                    subscriberSessionId = subscription.SubscriberId,
+                    subscriberDeviceId = subscriber?.DeviceId,
+                    subscriberRole = subscriber?.Role.ToString(),
+                    udpEndpoint = subscriber?.UdpEndpoint?.ToString(),
+                    prefix = "0x08",
+                    topic = "udp_link_metrics",
+                    linkId = NormalizeLinkId(subscription.SystemMonitorUdpLinkId),
+                    intervalMs = Math.Clamp(subscription.SystemMonitorIntervalMs, 250, 10_000)
+                };
+            }).ToArray<object>();
+        }
+
+        private static string? NormalizeLinkId(string? linkId)
+        {
+            var normalized = linkId?.Trim();
+            return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+        }
+
         public static string[] ToTopicNames(SystemMonitorTopicMask topics)
         {
-            var names = new List<string>(4);
+            var names = new List<string>(5);
             if ((topics & SystemMonitorTopicMask.UdpGlobal) != 0) names.Add("udp_global");
             if ((topics & SystemMonitorTopicMask.SignalingRates) != 0) names.Add("signaling_rates");
             if ((topics & SystemMonitorTopicMask.OnlineSummary) != 0) names.Add("online_summary");
             if ((topics & SystemMonitorTopicMask.RuntimeTables) != 0) names.Add("runtime_tables");
             return names.ToArray();
+        }
+
+        public static string[] ToPrefixes(SystemMonitorTopicMask topics)
+        {
+            var prefixes = new List<string>(1);
+            if ((topics & SystemMonitorTopicMask.Standard) != 0) prefixes.Add("0x07");
+            return prefixes.ToArray();
         }
 
         private IReadOnlyCollection<string> GetConfigTargets(string publisherSessionId, Func<SubscriptionDetail, bool> include)

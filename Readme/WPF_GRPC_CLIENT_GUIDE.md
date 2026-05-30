@@ -3,7 +3,7 @@
 本文档面向 **WPF / 上位机 / 网站本地代理** 这类 `CLIENT` 角色客户端，覆盖两类能力：
 
 - 控制面：HTTP 登录、设备列表、gRPC 注册、心跳、媒体订阅、EventStream 事件接收。
-- 监控面：HTTP 管理订阅，客户端通过 UDP 接收服务端自产的高频监控数据 `0x07`。
+- 监控面：HTTP 管理订阅，客户端通过 UDP 接收服务端自产的高频监控数据 `0x07` / `0x08`。
 
 当前系统不再提供 SSE 监控流。低频信息通过 HTTP 拉取，高频监控信息通过 UDP 推送。
 
@@ -119,7 +119,7 @@ var headers = new Metadata
 4. 启动 gRPC `Ping` 心跳。
 5. 打开 gRPC `EventStream`。
 6. 向服务端 UDP 端口发送 `HELLO|SessionId|Timestamp|Signature`，建立 UDP endpoint。
-7. 如需高频监控，HTTP `POST /api/client/monitor/subscriptions` 创建监控订阅。
+7. 如需高频监控，按需调用 `0x07` 或 `0x08` 的 HTTP 监控订阅接口。
 8. 按需 HTTP 拉取设备列表，选择机器人后调用 gRPC `Subscribe` 订阅媒体/配置相关信息。
 
 ```mermaid
@@ -141,6 +141,10 @@ sequenceDiagram
     U-->>WPF: ACK
     WPF->>H: POST /api/client/monitor/subscriptions
     H-->>WPF: subscribed, prefix=0x07
+    opt link monitor
+      WPF->>H: POST /api/client/monitor/link-subscriptions
+      H-->>WPF: subscribed, prefix=0x08
+    end
     loop intervalMs
         U-->>WPF: 0x07 + JSON monitor envelope
     end
@@ -236,7 +240,7 @@ static string SignUdpControl(string type, string sessionId, long timestampSecond
 
 ---
 
-## 8. 高频监控订阅
+## 8. 0x07 高频系统监控订阅
 
 高频监控由 HTTP 控制订阅，UDP 数据面推送。订阅操作必须使用 admin bearer token，且目标 `subscriberSessionId` 必须已经存在并拥有 UDP endpoint。
 
@@ -268,6 +272,11 @@ Authorization: Bearer <accessToken>
 - `online_summary`：服务端视角的注册数、在线数、按角色在线数、推送通道连通数。
 - `runtime_tables`：后端运行时会话表、配对表、转发表、反馈路由等内部表数量快照。
 
+说明：
+
+- 这个 `POST` 是对当前 `subscriberSessionId` 的整条监控订阅做覆盖更新，不是局部增量 patch。
+- `0x08` 链路监控已经拆到独立接口 `/api/client/monitor/link-subscriptions`。
+
 其中 `udp_global` 里的 UDP 分类统计当前已包含：
 
 - `0x01` video
@@ -277,6 +286,7 @@ Authorization: Bearer <accessToken>
 - `0x05` telemetryLowRate
 - `0x06` telemetryHighRate
 - `0x07` system
+- `0x08` system
 
 成功响应：
 
@@ -287,7 +297,7 @@ Authorization: Bearer <accessToken>
   "publisherSessionId": "system:monitor",
   "subscriberSessionId": "client-session-id",
   "udpEndpoint": "192.168.1.20:52000",
-  "prefix": "0x07",
+  "prefixes": ["0x07"],
   "topics": ["udp_global", "signaling_rates", "online_summary", "runtime_tables"],
   "effectiveIntervalMs": 1000
 }
@@ -297,6 +307,8 @@ Authorization: Bearer <accessToken>
 
 - `GET /api/client/monitor/subscriptions`
 - `DELETE /api/client/monitor/subscriptions/{subscriberSessionId}`
+
+如果客户端还要接收 `0x08`，需要额外调用独立接口 `/api/client/monitor/link-subscriptions`。
 
 ---
 
@@ -339,11 +351,140 @@ if (result.Buffer.Length > 1 && result.Buffer[0] == 0x07)
 
 ---
 
-## 10. 低频监控 HTTP 拉取
+## 10. UDP 0x08 链路监控包
+
+`0x08` 使用独立的链路监控订阅接口，不与 `0x07` 共用订阅入口。
+
+### POST /api/client/monitor/link-subscriptions
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+```json
+{
+  "subscriberSessionId": "client-session-id",
+  "linkId": "lk_6f7c6c5bf27d45db9b8d9dd6a5f7a0d7",
+  "intervalMs": 1000
+}
+```
+
+校验规则：
+
+- admin bearer token 必须有效。
+- `subscriberSessionId` 必须存在。
+- 该 session 必须已有 UDP endpoint；否则返回 `409 Conflict`。
+- `linkId` 必须提供且不能为空。
+- `intervalMs` 范围为 `250..10000`，默认 `1000`。
+
+说明：
+
+- 一个客户端当前只允许订阅一条 `0x08` 链路。
+- 新请求会直接把原订阅切换到本次传入的 `linkId`。
+
+其它接口：
+
+- `GET /api/client/monitor/link-subscriptions`
+- `DELETE /api/client/monitor/link-subscriptions/{subscriberSessionId}`
+
+链路监控包格式：
+
+```text
+[0x08][UTF-8 JSON envelope]
+```
+
+JSON envelope 字段：
+
+- `sequence`：针对该订阅目标和 `0x08` 独立递增的序号。
+- `serverTimeUnixMs`：服务端发送时间。
+- `publisherSessionId`：固定为 `system:link-monitor`。
+- `targetSessionId`：订阅者 session。
+- `prefix`：固定为 `0x08`。
+- `topics`：固定为 `[
+  "udp_link_metrics"
+]`。
+- `linksUpdatedUtc`：链路统计服务最近一次 tick 时间。
+- `activeOnly`：当前固定为 `true`。
+- `subscribedLinkId`：本次 `0x08` 实际按哪个 `linkId` 过滤。
+- `links`：链路数组。
+
+链路对象字段：
+
+- `linkId`
+- `originSessionId`
+- `sourceNodeId`
+- `targetNodeId`
+- `direction`：`ingress` 或 `egress`
+- `mediaKind`：`video`、`pose`、`audio`、`telemetry_low_rate`、`telemetry_high_rate`、`feedback`、`system_monitor`、`topology_monitor`
+- `active`
+- `firstSeenUtc`
+- `lastSeenUtc`
+- `received`
+- `routeMatched`
+- `routeMiss`
+- `forwardPlanned`
+- `queueEnqueued`
+- `queueDropped`
+- `sendAttempt`
+- `sendSuccess`
+- `sendFail`
+- `retry`
+- `failureReasons`
+
+其中 `received`、`routeMatched`、`routeMiss`、`forwardPlanned`、`queueEnqueued`、`queueDropped`、`sendAttempt`、`sendSuccess`、`sendFail`、`retry` 的结构一致：
+
+- `perSecond.packets`
+- `perSecond.bytes`
+- `totals.packets`
+- `totals.bytes`
+
+`failureReasons` 包含：
+
+- `noRoute`
+- `noTarget`
+- `queueFull`
+- `noBufferSpace`
+- `hostUnreachable`
+- `networkUnreachable`
+- `timedOut`
+- `socketError`
+- `unknown`
+
+接收示例：
+
+```csharp
+var result = await udpClient.ReceiveAsync(cancellationToken);
+
+if (result.Buffer.Length > 1)
+{
+  if (result.Buffer[0] == 0x07)
+  {
+    var json07 = Encoding.UTF8.GetString(result.Buffer, 1, result.Buffer.Length - 1);
+    // 反序列化 0x07 envelope
+  }
+  else if (result.Buffer[0] == 0x08)
+  {
+    var json08 = Encoding.UTF8.GetString(result.Buffer, 1, result.Buffer.Length - 1);
+    // 反序列化 0x08 envelope，按 links 渲染链路图与统计面板
+  }
+}
+```
+
+推荐接入流程：
+
+1. 先调用 `GET /api/monitor/udp/links?activeOnly=true` 获取当前活跃链路。
+2. 让用户或前端逻辑选择关注的 `linkId`。
+3. 调用 `POST /api/client/monitor/link-subscriptions` 时携带 `linkId`。
+4. `0x08` 收到后，以 `subscribedLinkId` 和 `links` 渲染局部链路视图，而不是假设服务端会返回全量拓扑。
+
+---
+
+## 11. 低频监控 HTTP 拉取
 
 低频页面、调试工具或启动阶段可继续使用 HTTP 拉取：
 
 - `GET /api/monitor/udp/stats`
+- `GET /api/monitor/udp/links`
 - `GET /api/monitor/system/stats`
 - `GET /api/monitor/sessions`
 - `GET /api/monitor/sessions/{sessionId}`
@@ -351,9 +492,32 @@ if (result.Buffer.Length > 1 && result.Buffer[0] == 0x07)
 
 其中 `/api/monitor/udp/stats` 默认仅在 Development 环境启用；非 Development 需要配置 `Monitoring:Enabled=true`。
 
+`/api/monitor/udp/links` 同样受相同监控开关控制，支持查询参数：
+
+- `activeOnly=true|false`
+
+返回字段：
+
+- `updatedUtc`
+- `activeOnly`
+- `items`
+
+`items` 中保留 `0x08` 的基础链路字段，并额外补充便于展示的：
+
+- `origin`
+- `source`
+- `target`
+
+其中默认展示名规则为：
+
+- 普通 session 节点默认使用 `deviceId` 作为 `displayName`
+- `system:udp` 默认显示为 `UDP 转发服务`
+- `system:monitor` 默认显示为 `系统监控服务`
+- `system:link-monitor` 默认显示为 `链路监控服务`
+
 ---
 
-## 11. 媒体订阅
+## 12. 媒体订阅
 
 WPF 客户端不需要配对，也可以直接订阅某个机器人发布者。
 
@@ -390,11 +554,11 @@ await client.SubscribeAsync(new SubscribeRequest
 - `SubTelemetryLowRate = true`：订阅 `0x05`
 - `SubTelemetryHighRate = true`：订阅 `0x06`
 
-媒体订阅控制的是机器人/VR/客户端之间的媒体发布者与订阅者关系；系统监控订阅的发布者固定为 `system:monitor`，由 HTTP admin 接口控制。
+媒体订阅控制的是机器人/VR/客户端之间的媒体发布者与订阅者关系；`0x07` 系统监控发布者固定为 `system:monitor`，`0x08` 链路监控发布者固定为 `system:link-monitor`，都由 HTTP admin 接口控制。
 
 ---
 
-## 12. 最小启动骨架
+## 13. 最小启动骨架
 
 ```csharp
 var httpClient = new HttpClient { BaseAddress = new Uri(httpBaseAddress) };
@@ -446,7 +610,7 @@ await httpClient.PostAsJsonAsync("/api/client/monitor/subscriptions", new
 - `UdpEndpointClient`
   - 负责 UDP `HELLO/PING`、ACK/PONG/DACK、`0x07` 接收。
 - `MonitorSubscriptionApi`
-  - 负责 HTTP 创建/删除系统监控订阅。
+  - 负责 HTTP 创建/删除 `0x07` 系统监控订阅与 `0x08` 链路监控订阅。
 - `RobotDirectoryService`
   - 负责 HTTP 获取机器人/VR/客户端列表。
 - `EventDispatchService`
