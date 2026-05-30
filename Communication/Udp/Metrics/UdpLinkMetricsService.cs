@@ -143,7 +143,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private UdpRuntimeLink GetOrCreate(UdpLinkKey key)
         {
             var link = _links.GetOrAdd(key, static k => new UdpRuntimeLink(k));
-            link.SetActive(true);
             return link;
         }
 
@@ -344,6 +343,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
 
         private void Touch()
         {
+            SetActive(true);
             Volatile.Write(ref _lastSeenUnixMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         }
 

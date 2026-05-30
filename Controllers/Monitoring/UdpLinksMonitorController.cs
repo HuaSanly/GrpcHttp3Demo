@@ -29,26 +29,145 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
             var monitoringEnabled = _env.IsDevelopment() || _configuration.GetValue<bool>("Monitoring:Enabled", false);
             if (!monitoringEnabled) return NotFound();
 
+            var raw = _links.SnapshotAll(activeOnly: false)
+                .Select(ToDictionary)
+                .ToList();
+
+            var aggregated = AggregateLinks(raw, activeOnly);
+
             return Ok(new
             {
                 updatedUtc = _links.LastTickUtc,
                 activeOnly,
-                items = _links.SnapshotAll(activeOnly).Select(BuildLinkListItem).ToArray()
+                items = aggregated.Select(BuildAggregatedLinkItem).ToArray()
             });
         }
 
-        private object BuildLinkListItem(object snapshot)
+        private List<Dictionary<string, object?>> AggregateLinks(
+            List<Dictionary<string, object?>> raw, bool activeOnly)
         {
-            var item = ToDictionary(snapshot);
+            var groups = raw
+                .GroupBy(d => (
+                    origin: GetString(d, "originSessionId") ?? "",
+                    media: GetString(d, "mediaKind") ?? ""))
+                .ToList();
 
-            var originSessionId = GetString(item, "originSessionId");
-            var sourceNodeId = GetString(item, "sourceNodeId");
-            var targetNodeId = GetString(item, "targetNodeId");
+            var result = new List<Dictionary<string, object?>>();
 
-            item["origin"] = BuildOriginDescriptor(originSessionId);
-            item["source"] = BuildNodeDescriptor(sourceNodeId);
-            item["target"] = BuildNodeDescriptor(targetNodeId);
-            return item;
+            foreach (var group in groups)
+            {
+                var ingressItems = group
+                    .Where(d => IsDirection(d, "ingress"))
+                    .ToList();
+                var egressItems = group
+                    .Where(d => IsDirection(d, "egress"))
+                    .ToList();
+
+                foreach (var egress in egressItems)
+                {
+                    var ingress = ingressItems.FirstOrDefault();
+                    var merged = MergeLinkPair(ingress, egress);
+                    if (!activeOnly || IsActiveInMerged(merged))
+                        result.Add(merged);
+                }
+
+                if (egressItems.Count == 0)
+                {
+                    foreach (var ingress in ingressItems)
+                    {
+                        var merged = MergeLinkPair(ingress, null);
+                        if (!activeOnly || IsActiveInMerged(merged))
+                            result.Add(merged);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static Dictionary<string, object?> MergeLinkPair(
+            Dictionary<string, object?>? ingress,
+            Dictionary<string, object?>? egress)
+        {
+            var primary = ingress ?? egress!;
+            var merged = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["linkId"] = ingress?.GetValueOrDefault("linkId") ?? egress!.GetValueOrDefault("linkId"),
+                ["originSessionId"] = primary.GetValueOrDefault("originSessionId"),
+                ["mediaKind"] = primary.GetValueOrDefault("mediaKind"),
+                ["direction"] = (ingress, egress) switch
+                {
+                    (not null, not null) => "bidirectional",
+                    (not null, null) => "ingress",
+                    (null, not null) => "egress",
+                    _ => "unknown"
+                },
+                ["active"] = GetBool(ingress, "active") || GetBool(egress, "active"),
+                ["firstSeenUtc"] = MinDateTime(ingress, egress, "firstSeenUtc"),
+                ["lastSeenUtc"] = MaxDateTime(ingress, egress, "lastSeenUtc"),
+                ["sourceNodeId"] = ingress?.GetValueOrDefault("sourceNodeId")
+                    ?? egress?.GetValueOrDefault("sourceNodeId"),
+                ["targetNodeId"] = egress?.GetValueOrDefault("targetNodeId")
+                    ?? ingress?.GetValueOrDefault("targetNodeId"),
+                ["ingress"] = ingress,
+                ["egress"] = egress
+            };
+            return merged;
+        }
+
+        private object BuildAggregatedLinkItem(Dictionary<string, object?> merged)
+        {
+            var originSessionId = GetString(merged, "originSessionId");
+            var sourceNodeId = GetString(merged, "sourceNodeId");
+            var targetNodeId = GetString(merged, "targetNodeId");
+
+            merged["origin"] = BuildOriginDescriptor(originSessionId);
+            merged["source"] = BuildNodeDescriptor(sourceNodeId);
+            merged["target"] = BuildNodeDescriptor(targetNodeId);
+            return merged;
+        }
+
+        private static bool IsDirection(Dictionary<string, object?> item, string direction)
+        {
+            return string.Equals(
+                GetString(item, "direction"),
+                direction,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool GetBool(Dictionary<string, object?>? item, string key)
+        {
+            if (item == null) return false;
+            return item.TryGetValue(key, out var value) && value is true;
+        }
+
+        private static DateTime? GetDateTime(Dictionary<string, object?>? item, string key)
+        {
+            if (item == null) return null;
+            return item.TryGetValue(key, out var value) && value is DateTime dt ? dt : null;
+        }
+
+        private static DateTime MinDateTime(Dictionary<string, object?>? a, Dictionary<string, object?>? b, string key)
+        {
+            var da = GetDateTime(a, key);
+            var db = GetDateTime(b, key);
+            if (da == null) return db ?? DateTime.MinValue;
+            if (db == null) return da.Value;
+            return da.Value < db.Value ? da.Value : db.Value;
+        }
+
+        private static DateTime MaxDateTime(Dictionary<string, object?>? a, Dictionary<string, object?>? b, string key)
+        {
+            var da = GetDateTime(a, key);
+            var db = GetDateTime(b, key);
+            if (da == null) return db ?? DateTime.MinValue;
+            if (db == null) return da.Value;
+            return da.Value > db.Value ? da.Value : db.Value;
+        }
+
+        private static bool IsActiveInMerged(Dictionary<string, object?> merged)
+        {
+            return GetBool(merged, "active");
         }
 
         private Dictionary<string, object?> ToDictionary(object source)
