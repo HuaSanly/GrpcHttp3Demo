@@ -26,7 +26,7 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         private readonly ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> _feedbackRoute = new();
         private readonly ConcurrentDictionary<string, byte[]> _p2pSharedKeys = new();
         private UdpSystemMonitorTarget[] _systemMonitorTargets = Array.Empty<UdpSystemMonitorTarget>();
-        private UdpLinkMonitorTarget[] _linkMonitorTargets = Array.Empty<UdpLinkMonitorTarget>();
+        private UdpTopologyMonitorTarget[] _linkMonitorTargets = Array.Empty<UdpTopologyMonitorTarget>();
 
         internal ConcurrentDictionary<string, DeviceContext> Sessions => _sessions;
         internal ConcurrentDictionary<IPEndPoint, string> EndpointIndex => _endpointIndex;
@@ -45,14 +45,14 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         internal ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> FeedbackRoute => _feedbackRoute;
         internal ConcurrentDictionary<string, byte[]> P2pSharedKeys => _p2pSharedKeys;
         internal UdpSystemMonitorTarget[] SystemMonitorTargets => Volatile.Read(ref _systemMonitorTargets);
-        internal UdpLinkMonitorTarget[] LinkMonitorTargets => Volatile.Read(ref _linkMonitorTargets);
+        internal UdpTopologyMonitorTarget[] LinkMonitorTargets => Volatile.Read(ref _linkMonitorTargets);
 
         internal void SetSystemMonitorTargets(UdpSystemMonitorTarget[] targets)
         {
             Volatile.Write(ref _systemMonitorTargets, targets);
         }
 
-        internal void SetLinkMonitorTargets(UdpLinkMonitorTarget[] targets)
+        internal void SetLinkMonitorTargets(UdpTopologyMonitorTarget[] targets)
         {
             Volatile.Write(ref _linkMonitorTargets, targets);
         }

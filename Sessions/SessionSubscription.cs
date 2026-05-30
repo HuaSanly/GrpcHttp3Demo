@@ -149,7 +149,7 @@ namespace GrpcHttp3Demo.Sessions
             return true;
         }
 
-        public bool TryUpdateLinkMonitorSubscription(string subscriberSessionId, bool isSub, int intervalMs, string? linkId, out string message)
+        public bool TryUpdateTopologyMonitorSubscription(string subscriberSessionId, bool isSub, int intervalMs, string? topologyId, out string message)
         {
             if (!_memory.Sessions.TryGetValue(subscriberSessionId, out var subscriber))
             {
@@ -163,10 +163,10 @@ namespace GrpcHttp3Demo.Sessions
                 return false;
             }
 
-            var normalizedLinkId = NormalizeLinkId(linkId);
-            if (isSub && string.IsNullOrWhiteSpace(normalizedLinkId))
+            var normalizedTopologyId = NormalizeTopologyId(topologyId);
+            if (isSub && string.IsNullOrWhiteSpace(normalizedTopologyId))
             {
-                message = "Missing linkId";
+                message = "Missing topologyId";
                 return false;
             }
 
@@ -178,7 +178,7 @@ namespace GrpcHttp3Demo.Sessions
                 {
                     SubscriberId = subscriberSessionId,
                     SystemMonitorIntervalMs = effectiveIntervalMs,
-                    SystemMonitorUdpLinkId = normalizedLinkId
+                    LinkMonitorTopologyId = normalizedTopologyId
                 };
 
                 var meta = _memory.SubscriptionMeta.GetOrAdd(SystemPublishers.LinkMonitorPublisherSessionId, _ => new ConcurrentDictionary<string, SubscriptionMeta>());
@@ -186,7 +186,7 @@ namespace GrpcHttp3Demo.Sessions
                 {
                     SubscriberId = subscriberSessionId,
                     SystemMonitorIntervalMs = effectiveIntervalMs,
-                    SystemMonitorUdpLinkId = normalizedLinkId,
+                    LinkMonitorTopologyId = normalizedTopologyId,
                     LastUpdatedUtc = DateTime.UtcNow
                 };
 
@@ -244,23 +244,23 @@ namespace GrpcHttp3Demo.Sessions
 
             if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var subscriptions))
             {
-                _memory.SetLinkMonitorTargets(Array.Empty<UdpLinkMonitorTarget>());
+                _memory.SetLinkMonitorTargets(Array.Empty<UdpTopologyMonitorTarget>());
                 return;
             }
 
-            var targets = new List<UdpLinkMonitorTarget>(subscriptions.Count);
+            var targets = new List<UdpTopologyMonitorTarget>(subscriptions.Count);
             foreach (var item in subscriptions.Values)
             {
                 if (!_memory.Sessions.TryGetValue(item.SubscriberId, out var subscriber) || subscriber.UdpEndpoint == null) continue;
-                var normalizedLinkId = NormalizeLinkId(item.SystemMonitorUdpLinkId);
-                if (string.IsNullOrWhiteSpace(normalizedLinkId)) continue;
+                var normalizedTopologyId = NormalizeTopologyId(item.LinkMonitorTopologyId);
+                if (string.IsNullOrWhiteSpace(normalizedTopologyId)) continue;
 
                 var link = _linkMetrics.GetOrCreateTopologyMonitorLink(SystemPublishers.LinkMonitorPublisherSessionId, item.SubscriberId);
-                targets.Add(new UdpLinkMonitorTarget(
+                targets.Add(new UdpTopologyMonitorTarget(
                     item.SubscriberId,
                     subscriber.UdpEndpoint,
                     item.SystemMonitorIntervalMs,
-                    normalizedLinkId,
+                    normalizedTopologyId,
                     link));
             }
 
@@ -291,7 +291,7 @@ namespace GrpcHttp3Demo.Sessions
             }).ToArray<object>();
         }
 
-        public IReadOnlyCollection<object> ListLinkMonitorSubscriptions()
+        public IReadOnlyCollection<object> ListTopologyMonitorSubscriptions()
         {
             if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var subscriptions))
             {
@@ -310,15 +310,15 @@ namespace GrpcHttp3Demo.Sessions
                     udpEndpoint = subscriber?.UdpEndpoint?.ToString(),
                     prefix = "0x08",
                     topic = "udp_link_metrics",
-                    linkId = NormalizeLinkId(subscription.SystemMonitorUdpLinkId),
+                    topologyId = NormalizeTopologyId(subscription.LinkMonitorTopologyId),
                     intervalMs = Math.Clamp(subscription.SystemMonitorIntervalMs, 250, 10_000)
                 };
             }).ToArray<object>();
         }
 
-        private static string? NormalizeLinkId(string? linkId)
+        private static string? NormalizeTopologyId(string? topologyId)
         {
-            var normalized = linkId?.Trim();
+            var normalized = topologyId?.Trim();
             return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
         }
 

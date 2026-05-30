@@ -262,9 +262,9 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             return payload;
         }
 
-        private byte[] BuildTopologyMonitorPayload(UdpLinkMonitorTarget target)
+        private byte[] BuildTopologyMonitorPayload(UdpTopologyMonitorTarget target)
         {
-            var linkSnapshot = _linkMetrics.SnapshotByLinkId(target.LinkId, activeOnly: true);
+            var linkSnapshot = _linkMetrics.SnapshotByTopologyId(target.TopologyId, activeOnly: true);
 
             var envelope = new
             {
@@ -276,7 +276,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 topics = new[] { "udp_link_metrics" },
                 linksUpdatedUtc = _linkMetrics.LastTickUtc,
                 activeOnly = true,
-                subscribedLinkId = target.LinkId,
+                subscribedTopologyId = target.TopologyId,
                 links = linkSnapshot
             };
 

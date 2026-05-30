@@ -11,7 +11,7 @@ namespace GrpcHttp3Demo.Models.Session
         public bool SubTelemetryHighRate { get; set; }
         public SystemMonitorTopicMask SystemMonitorTopics { get; set; }
         public int SystemMonitorIntervalMs { get; set; } = 1000;
-        public string? SystemMonitorUdpLinkId { get; set; }
+        public string? LinkMonitorTopologyId { get; set; }
         public byte[]? Sps { get; set; }
         public byte[]? Pps { get; set; }
         public float? TargetBitrateKbps { get; set; }

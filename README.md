@@ -200,4 +200,4 @@ GRANT ALL PRIVILEGES ON DATABASE grpc_http3_demo TO grpc_http3_app;
 - `/api/system/config`
 
 UDP 系统监控推送使用前缀 `0x07`，通过 `/api/client/monitor/subscriptions` 管理订阅。
-UDP 链路监控推送使用前缀 `0x08`，通过 `/api/client/monitor/link-subscriptions` 管理订阅。
+UDP 链路监控推送使用前缀 `0x08`，通过 `/api/client/monitor/topology-subscriptions` 管理订阅。

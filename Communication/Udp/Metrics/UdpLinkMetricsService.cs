@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using GrpcHttp3Demo.Sessions;
 
@@ -43,6 +45,20 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         string TargetNodeId,
         UdpLinkDirection Direction,
         UdpLinkMediaKind MediaKind);
+
+    public sealed record UdpTopologyEdgeSnapshot(
+        string SourceNodeId,
+        string TargetNodeId,
+        bool Active,
+        string[] Flows);
+
+    public sealed record UdpTopologySnapshot(
+        string TopologyId,
+        bool Active,
+        DateTime FirstSeenUtc,
+        DateTime LastSeenUtc,
+        string[] NodeIds,
+        UdpTopologyEdgeSnapshot[] Edges);
 
     public sealed class UdpLinkMetricsService : IDisposable
     {
@@ -135,9 +151,236 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 .ToArray<object>();
         }
 
+        public IReadOnlyCollection<UdpTopologySnapshot> SnapshotTopologies(bool activeOnly)
+        {
+            return BuildTopologyGroups(activeOnly)
+                .Select(group => group.ToSnapshot())
+                .ToArray();
+        }
+
+        public IReadOnlyCollection<object> SnapshotByTopologyId(string? topologyId, bool activeOnly)
+        {
+            if (string.IsNullOrWhiteSpace(topologyId))
+            {
+                return Array.Empty<object>();
+            }
+
+            var group = BuildTopologyGroups(activeOnly)
+                .FirstOrDefault(item => string.Equals(item.TopologyId, topologyId, StringComparison.Ordinal));
+
+            if (group == null)
+            {
+                return Array.Empty<object>();
+            }
+
+            return group.Links
+                .OrderBy(link => link.OriginSessionId, StringComparer.Ordinal)
+                .ThenBy(link => link.Direction)
+                .ThenBy(link => link.MediaKind)
+                .ThenBy(link => link.TargetNodeId, StringComparer.Ordinal)
+                .Select(link => link.Snapshot())
+                .ToArray<object>();
+        }
+
         public void Dispose()
         {
             _timer.Dispose();
+        }
+
+        private List<UdpTopologyGroup> BuildTopologyGroups(bool activeOnly)
+        {
+            var links = _links.Values
+                .Where(link => link.HasObservedMetrics() && (!activeOnly || link.Active))
+                .ToArray();
+
+            if (links.Length == 0)
+            {
+                return new List<UdpTopologyGroup>();
+            }
+
+            var adjacency = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var peerNodes = new HashSet<string>(StringComparer.Ordinal);
+            var monitorOnlyNodes = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var link in links)
+            {
+                if (IsMonitorMediaKind(link.MediaKind))
+                {
+                    if (IsPeerNodeId(link.TargetNodeId))
+                    {
+                        monitorOnlyNodes.Add(link.TargetNodeId);
+                    }
+
+                    continue;
+                }
+
+                if (IsPeerNodeId(link.OriginSessionId))
+                {
+                    peerNodes.Add(link.OriginSessionId);
+                }
+
+                if (link.Direction == UdpLinkDirection.Egress
+                    && IsPeerNodeId(link.OriginSessionId)
+                    && IsPeerNodeId(link.TargetNodeId))
+                {
+                    peerNodes.Add(link.TargetNodeId);
+                    ConnectPeerNodes(adjacency, link.OriginSessionId, link.TargetNodeId);
+                }
+            }
+
+            var groups = new List<UdpTopologyGroup>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var assignedMonitorNodes = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var startNode in peerNodes.OrderBy(node => node, StringComparer.Ordinal))
+            {
+                if (!visited.Add(startNode))
+                {
+                    continue;
+                }
+
+                var component = new HashSet<string>(StringComparer.Ordinal) { startNode };
+                var stack = new Stack<string>();
+                stack.Push(startNode);
+
+                while (stack.Count > 0)
+                {
+                    var current = stack.Pop();
+                    if (!adjacency.TryGetValue(current, out var neighbors))
+                    {
+                        continue;
+                    }
+
+                    foreach (var neighbor in neighbors)
+                    {
+                        if (!visited.Add(neighbor))
+                        {
+                            continue;
+                        }
+
+                        component.Add(neighbor);
+                        stack.Push(neighbor);
+                    }
+                }
+
+                foreach (var node in component)
+                {
+                    assignedMonitorNodes.Add(node);
+                }
+
+                var groupLinks = links
+                    .Where(link => BelongsToTopology(link, component))
+                    .ToArray();
+
+                if (groupLinks.Length == 0)
+                {
+                    continue;
+                }
+
+                groups.Add(new UdpTopologyGroup(CreateTopologyId(component), component, groupLinks));
+            }
+
+            foreach (var node in monitorOnlyNodes.OrderBy(value => value, StringComparer.Ordinal))
+            {
+                if (assignedMonitorNodes.Contains(node))
+                {
+                    continue;
+                }
+
+                var component = new HashSet<string>(StringComparer.Ordinal) { node };
+                var groupLinks = links
+                    .Where(link => IsMonitorMediaKind(link.MediaKind)
+                        && string.Equals(link.TargetNodeId, node, StringComparison.Ordinal))
+                    .ToArray();
+
+                if (groupLinks.Length == 0)
+                {
+                    continue;
+                }
+
+                groups.Add(new UdpTopologyGroup(CreateTopologyId(component), component, groupLinks));
+            }
+
+            return groups
+                .OrderBy(group => group.TopologyId, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private static void ConnectPeerNodes(
+            IDictionary<string, HashSet<string>> adjacency,
+            string sourceNodeId,
+            string targetNodeId)
+        {
+            if (!adjacency.TryGetValue(sourceNodeId, out var sourceNeighbors))
+            {
+                sourceNeighbors = new HashSet<string>(StringComparer.Ordinal);
+                adjacency[sourceNodeId] = sourceNeighbors;
+            }
+
+            sourceNeighbors.Add(targetNodeId);
+
+            if (!adjacency.TryGetValue(targetNodeId, out var targetNeighbors))
+            {
+                targetNeighbors = new HashSet<string>(StringComparer.Ordinal);
+                adjacency[targetNodeId] = targetNeighbors;
+            }
+
+            targetNeighbors.Add(sourceNodeId);
+        }
+
+        private static bool BelongsToTopology(UdpRuntimeLink link, IReadOnlySet<string> topologyPeerNodeIds)
+        {
+            if (IsMonitorMediaKind(link.MediaKind))
+            {
+                return topologyPeerNodeIds.Contains(link.TargetNodeId);
+            }
+
+            if (topologyPeerNodeIds.Contains(link.OriginSessionId))
+            {
+                return true;
+            }
+
+            return link.Direction == UdpLinkDirection.Egress && topologyPeerNodeIds.Contains(link.TargetNodeId);
+        }
+
+        private static bool IsPeerNodeId(string nodeId)
+        {
+            return !string.IsNullOrWhiteSpace(nodeId) && !IsSystemNodeId(nodeId);
+        }
+
+        private static bool IsSystemNodeId(string nodeId)
+        {
+            return string.Equals(nodeId, ServerNodeId, StringComparison.Ordinal)
+                || string.Equals(nodeId, SystemPublishers.MonitorPublisherSessionId, StringComparison.Ordinal)
+                || string.Equals(nodeId, SystemPublishers.LinkMonitorPublisherSessionId, StringComparison.Ordinal);
+        }
+
+        private static bool IsMonitorMediaKind(UdpLinkMediaKind mediaKind)
+        {
+            return mediaKind == UdpLinkMediaKind.SystemMonitor || mediaKind == UdpLinkMediaKind.TopologyMonitor;
+        }
+
+        private static string CreateTopologyId(IEnumerable<string> peerNodeIds)
+        {
+            var joined = string.Join("|", peerNodeIds.OrderBy(value => value, StringComparer.Ordinal));
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(joined));
+            return $"top_{Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant()}";
+        }
+
+        internal static string ToWireMediaName(UdpLinkMediaKind mediaKind)
+        {
+            return mediaKind switch
+            {
+                UdpLinkMediaKind.Video => "video",
+                UdpLinkMediaKind.Pose => "pose",
+                UdpLinkMediaKind.Audio => "audio",
+                UdpLinkMediaKind.TelemetryLowRate => "telemetry_low_rate",
+                UdpLinkMediaKind.TelemetryHighRate => "telemetry_high_rate",
+                UdpLinkMediaKind.Feedback => "feedback",
+                UdpLinkMediaKind.SystemMonitor => "system_monitor",
+                UdpLinkMediaKind.TopologyMonitor => "topology_monitor",
+                _ => "unknown"
+            };
         }
 
         private UdpRuntimeLink GetOrCreate(UdpLinkKey key)
@@ -161,6 +404,54 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             {
                 _logger.LogError(ex, "UDP link metrics tick failed");
             }
+        }
+    }
+
+    internal sealed class UdpTopologyGroup
+    {
+        public UdpTopologyGroup(string topologyId, IReadOnlySet<string> peerNodeIds, IReadOnlyCollection<UdpRuntimeLink> links)
+        {
+            TopologyId = topologyId;
+            PeerNodeIds = peerNodeIds;
+            Links = links;
+        }
+
+        public string TopologyId { get; }
+        public IReadOnlySet<string> PeerNodeIds { get; }
+        public IReadOnlyCollection<UdpRuntimeLink> Links { get; }
+
+        public UdpTopologySnapshot ToSnapshot()
+        {
+            var nodeIds = Links
+                .SelectMany(link => new[] { link.SourceNodeId, link.TargetNodeId })
+                .Concat(PeerNodeIds)
+                .Where(nodeId => !string.IsNullOrWhiteSpace(nodeId))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(nodeId => nodeId, StringComparer.Ordinal)
+                .ToArray();
+
+            var edges = Links
+                .GroupBy(link => (link.SourceNodeId, link.TargetNodeId))
+                .Select(group => new UdpTopologyEdgeSnapshot(
+                    group.Key.SourceNodeId,
+                    group.Key.TargetNodeId,
+                    group.Any(link => link.Active),
+                    group
+                        .Select(link => UdpLinkMetricsService.ToWireMediaName(link.MediaKind))
+                        .Distinct(StringComparer.Ordinal)
+                        .OrderBy(flow => flow, StringComparer.Ordinal)
+                        .ToArray()))
+                .OrderBy(edge => edge.SourceNodeId, StringComparer.Ordinal)
+                .ThenBy(edge => edge.TargetNodeId, StringComparer.Ordinal)
+                .ToArray();
+
+            return new UdpTopologySnapshot(
+                TopologyId,
+                Links.Any(link => link.Active),
+                Links.Min(link => link.FirstSeenUtc),
+                Links.Max(link => link.LastSeenUtc),
+                nodeIds,
+                edges);
         }
     }
 
@@ -209,6 +500,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         public UdpLinkDirection Direction { get; }
         public UdpLinkMediaKind MediaKind { get; }
         public DateTime FirstSeenUtc { get; }
+        internal DateTime LastSeenUtc => DateTimeOffset.FromUnixTimeMilliseconds(Volatile.Read(ref _lastSeenUnixMs)).UtcDateTime;
         public bool Active => Volatile.Read(ref _active) == 1;
 
         public void SetActive(bool active)
@@ -291,7 +583,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 mediaKind = ToWireMediaName(MediaKind),
                 active = Active,
                 firstSeenUtc = FirstSeenUtc,
-                lastSeenUtc = DateTimeOffset.FromUnixTimeMilliseconds(Volatile.Read(ref _lastSeenUnixMs)).UtcDateTime,
+                lastSeenUtc = LastSeenUtc,
                 received = _received.Snapshot(),
                 routeMatched = _routeMatched.Snapshot(),
                 routeMiss = _routeMiss.Snapshot(),
@@ -315,6 +607,29 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     unknown = _unknownError.Snapshot()
                 }
             };
+        }
+
+        internal bool HasObservedMetrics()
+        {
+            return _received.HasObserved
+                || _routeMatched.HasObserved
+                || _routeMiss.HasObserved
+                || _forwardPlanned.HasObserved
+                || _queueEnqueued.HasObserved
+                || _queueDropped.HasObserved
+                || _sendAttempt.HasObserved
+                || _sendSuccess.HasObserved
+                || _sendFail.HasObserved
+                || _retry.HasObserved
+                || _noRoute.HasObserved
+                || _noTarget.HasObserved
+                || _queueFull.HasObserved
+                || _noBufferSpace.HasObserved
+                || _hostUnreachable.HasObserved
+                || _networkUnreachable.HasObserved
+                || _timedOut.HasObserved
+                || _socketError.HasObserved
+                || _unknownError.HasObserved;
         }
 
         internal void Tick()
@@ -432,6 +747,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             _lastPacketsPerSecond = Interlocked.Exchange(ref _packetsThisSecond, 0);
             _lastBytesPerSecond = Interlocked.Exchange(ref _bytesThisSecond, 0);
         }
+
+        internal bool HasObserved => Interlocked.Read(ref _packetsTotal) > 0 || Interlocked.Read(ref _bytesTotal) > 0;
     }
 
     internal sealed class UdpEventCounter
@@ -459,5 +776,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         {
             _lastPerSecond = Interlocked.Exchange(ref _thisSecond, 0);
         }
+
+        internal bool HasObserved => Interlocked.Read(ref _total) > 0;
     }
 }

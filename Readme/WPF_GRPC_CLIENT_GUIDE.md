@@ -142,7 +142,7 @@ sequenceDiagram
     WPF->>H: POST /api/client/monitor/subscriptions
     H-->>WPF: subscribed, prefix=0x07
     opt link monitor
-      WPF->>H: POST /api/client/monitor/link-subscriptions
+      WPF->>H: POST /api/client/monitor/topology-subscriptions
       H-->>WPF: subscribed, prefix=0x08
     end
     loop intervalMs
@@ -275,7 +275,7 @@ Authorization: Bearer <accessToken>
 说明：
 
 - 这个 `POST` 是对当前 `subscriberSessionId` 的整条监控订阅做覆盖更新，不是局部增量 patch。
-- `0x08` 链路监控已经拆到独立接口 `/api/client/monitor/link-subscriptions`。
+- `0x08` 链路监控已经拆到独立接口 `/api/client/monitor/topology-subscriptions`。
 
 其中 `udp_global` 里的 UDP 分类统计当前已包含：
 
@@ -308,7 +308,7 @@ Authorization: Bearer <accessToken>
 - `GET /api/client/monitor/subscriptions`
 - `DELETE /api/client/monitor/subscriptions/{subscriberSessionId}`
 
-如果客户端还要接收 `0x08`，需要额外调用独立接口 `/api/client/monitor/link-subscriptions`。
+如果客户端还要接收 `0x08`，需要额外调用独立接口 `/api/client/monitor/topology-subscriptions`。
 
 ---
 
@@ -353,9 +353,9 @@ if (result.Buffer.Length > 1 && result.Buffer[0] == 0x07)
 
 ## 10. UDP 0x08 链路监控包
 
-`0x08` 使用独立的链路监控订阅接口，不与 `0x07` 共用订阅入口。
+`0x08` 使用独立的拓扑监控订阅接口，不与 `0x07` 共用订阅入口。服务端内部仍按 raw link 逐条统计；订阅和 HTTP 选择用的是拓扑组唯一标识 `topologyId`。
 
-### POST /api/client/monitor/link-subscriptions
+### POST /api/client/monitor/topology-subscriptions
 
 ```http
 Authorization: Bearer <accessToken>
@@ -364,7 +364,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "subscriberSessionId": "client-session-id",
-  "linkId": "lk_6f7c6c5bf27d45db9b8d9dd6a5f7a0d7",
+  "topologyId": "top_2f0d3f14a14b9cde",
   "intervalMs": 1000
 }
 ```
@@ -374,18 +374,19 @@ Authorization: Bearer <accessToken>
 - admin bearer token 必须有效。
 - `subscriberSessionId` 必须存在。
 - 该 session 必须已有 UDP endpoint；否则返回 `409 Conflict`。
-- `linkId` 必须提供且不能为空。
+- `topologyId` 必须提供且不能为空。
 - `intervalMs` 范围为 `250..10000`，默认 `1000`。
 
 说明：
 
-- 一个客户端当前只允许订阅一条 `0x08` 链路。
-- 新请求会直接把原订阅切换到本次传入的 `linkId`。
+- 一个客户端当前只允许订阅一个 `0x08` 拓扑组。
+- 新请求会直接把原订阅切换到本次传入的 `topologyId`。
+- 兼容别名接口仍可用：`/api/client/monitor/link-subscriptions`。
 
 其它接口：
 
-- `GET /api/client/monitor/link-subscriptions`
-- `DELETE /api/client/monitor/link-subscriptions/{subscriberSessionId}`
+- `GET /api/client/monitor/topology-subscriptions`
+- `DELETE /api/client/monitor/topology-subscriptions/{subscriberSessionId}`
 
 链路监控包格式：
 
@@ -405,17 +406,17 @@ JSON envelope 字段：
 ]`。
 - `linksUpdatedUtc`：链路统计服务最近一次 tick 时间。
 - `activeOnly`：当前固定为 `true`。
-- `subscribedLinkId`：本次 `0x08` 实际按哪个 `linkId` 过滤。
-- `links`：链路数组。
+- `subscribedTopologyId`：本次 `0x08` 实际按哪个 `topologyId` 过滤。
+- `links`：raw link 数组。
 
-链路对象字段：
+`links` 里的每个元素仍然是细粒度 raw link，对象字段保持不变：
 
 - `linkId`
 - `originSessionId`
 - `sourceNodeId`
 - `targetNodeId`
-- `direction`：`ingress` 或 `egress`
-- `mediaKind`：`video`、`pose`、`audio`、`telemetry_low_rate`、`telemetry_high_rate`、`feedback`、`system_monitor`、`topology_monitor`
+- `direction`
+- `mediaKind`
 - `active`
 - `firstSeenUtc`
 - `lastSeenUtc`
@@ -430,25 +431,6 @@ JSON envelope 字段：
 - `sendFail`
 - `retry`
 - `failureReasons`
-
-其中 `received`、`routeMatched`、`routeMiss`、`forwardPlanned`、`queueEnqueued`、`queueDropped`、`sendAttempt`、`sendSuccess`、`sendFail`、`retry` 的结构一致：
-
-- `perSecond.packets`
-- `perSecond.bytes`
-- `totals.packets`
-- `totals.bytes`
-
-`failureReasons` 包含：
-
-- `noRoute`
-- `noTarget`
-- `queueFull`
-- `noBufferSpace`
-- `hostUnreachable`
-- `networkUnreachable`
-- `timedOut`
-- `socketError`
-- `unknown`
 
 接收示例：
 
@@ -465,17 +447,17 @@ if (result.Buffer.Length > 1)
   else if (result.Buffer[0] == 0x08)
   {
     var json08 = Encoding.UTF8.GetString(result.Buffer, 1, result.Buffer.Length - 1);
-    // 反序列化 0x08 envelope，按 links 渲染链路图与统计面板
+    // 反序列化 0x08 envelope，按 links 渲染 raw link 统计面板
   }
 }
 ```
 
 推荐接入流程：
 
-1. 先调用 `GET /api/monitor/udp/links?activeOnly=true` 获取当前活跃链路。
-2. 让用户或前端逻辑选择关注的 `linkId`。
-3. 调用 `POST /api/client/monitor/link-subscriptions` 时携带 `linkId`。
-4. `0x08` 收到后，以 `subscribedLinkId` 和 `links` 渲染局部链路视图，而不是假设服务端会返回全量拓扑。
+1. 先调用 `GET /api/monitor/udp/topologies?activeOnly=true` 获取当前活跃拓扑组。
+2. 让用户或前端逻辑选择关注的 `topologyId`。
+3. 调用 `POST /api/client/monitor/topology-subscriptions` 时携带 `topologyId`。
+4. `0x08` 收到后，以 `subscribedTopologyId` 和 `links` 渲染当前拓扑组下的 raw link 明细，而不是假设服务端会返回全量拓扑。
 
 ---
 
@@ -484,7 +466,7 @@ if (result.Buffer.Length > 1)
 低频页面、调试工具或启动阶段可继续使用 HTTP 拉取：
 
 - `GET /api/monitor/udp/stats`
-- `GET /api/monitor/udp/links`
+- `GET /api/monitor/udp/topologies`
 - `GET /api/monitor/system/stats`
 - `GET /api/monitor/sessions`
 - `GET /api/monitor/sessions/{sessionId}`
@@ -492,9 +474,11 @@ if (result.Buffer.Length > 1)
 
 其中 `/api/monitor/udp/stats` 默认仅在 Development 环境启用；非 Development 需要配置 `Monitoring:Enabled=true`。
 
-`/api/monitor/udp/links` 同样受相同监控开关控制，支持查询参数：
+`/api/monitor/udp/topologies` 同样受相同监控开关控制，支持查询参数：
 
 - `activeOnly=true|false`
+
+兼容别名：`/api/monitor/udp/links`。
 
 返回字段：
 
@@ -502,13 +486,22 @@ if (result.Buffer.Length > 1)
 - `activeOnly`
 - `items`
 
-`items` 中保留 `0x08` 的基础链路字段，并额外补充便于展示的：
+`items` 中每个对象表示一个拓扑组，包含：
 
-- `origin`
-- `source`
-- `target`
+- `topologyId`
+- `active`
+- `firstSeenUtc`
+- `lastSeenUtc`
+- `nodes`
+- `edges`
 
-其中默认展示名规则为：
+其中：
+
+- `nodes`：节点数组；每个节点包含 `nodeId`、`sessionId`、`deviceId`、`displayName`、`nodeKind`
+- `edges`：边数组；每条边包含 `sourceNodeId`、`targetNodeId`、`active`、`flows`
+- `flows`：当前过滤条件下该边包含的媒体类型数组，例如 `video`、`pose`、`audio`、`telemetry_low_rate`
+
+默认展示名规则为：
 
 - 普通 session 节点默认使用 `deviceId` 作为 `displayName`
 - `system:udp` 默认显示为 `UDP 转发服务`

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace GrpcHttp3Demo.Controllers.Client
 {
     [ApiController]
+    [Route("api/client/monitor/topology-subscriptions")]
     [Route("api/client/monitor/link-subscriptions")]
     public sealed class ClientLinkMonitorSubscriptionsController : ControllerBase
     {
@@ -28,12 +29,12 @@ namespace GrpcHttp3Demo.Controllers.Client
             {
                 updatedUtc = DateTime.UtcNow,
                 publisherSessionId = SystemPublishers.LinkMonitorPublisherSessionId,
-                items = _subscriptions.ListLinkMonitorSubscriptions()
+                items = _subscriptions.ListTopologyMonitorSubscriptions()
             });
         }
 
         [HttpPost]
-        public IActionResult Subscribe([FromBody] LinkMonitorSubscriptionRequest? request)
+        public IActionResult Subscribe([FromBody] TopologyMonitorSubscriptionRequest? request)
         {
             if (!Authorize()) return Unauthorized(new { message = "Missing or invalid bearer token" });
             if (request == null || string.IsNullOrWhiteSpace(request.SubscriberSessionId))
@@ -53,12 +54,12 @@ namespace GrpcHttp3Demo.Controllers.Client
             }
 
             var intervalMs = Math.Clamp(request.IntervalMs ?? 1000, 250, 10_000);
-            if (!_subscriptions.TryUpdateLinkMonitorSubscription(request.SubscriberSessionId, isSub: true, intervalMs, request.LinkId, out var message))
+            if (!_subscriptions.TryUpdateTopologyMonitorSubscription(request.SubscriberSessionId, isSub: true, intervalMs, request.TopologyId, out var message))
             {
                 return BadRequest(new { message });
             }
 
-            var normalizedLinkId = NormalizeLinkId(request.LinkId);
+            var normalizedTopologyId = NormalizeTopologyId(request.TopologyId);
 
             return Ok(new
             {
@@ -69,7 +70,7 @@ namespace GrpcHttp3Demo.Controllers.Client
                 udpEndpoint = session.UdpEndpoint.ToString(),
                 prefix = "0x08",
                 topic = "udp_link_metrics",
-                linkId = normalizedLinkId,
+                topologyId = normalizedTopologyId,
                 effectiveIntervalMs = intervalMs
             });
         }
@@ -80,7 +81,7 @@ namespace GrpcHttp3Demo.Controllers.Client
             if (!Authorize()) return Unauthorized(new { message = "Missing or invalid bearer token" });
             if (string.IsNullOrWhiteSpace(subscriberSessionId)) return BadRequest(new { message = "Missing subscriberSessionId" });
 
-            _subscriptions.TryUpdateLinkMonitorSubscription(subscriberSessionId, isSub: false, 1000, null, out var message);
+            _subscriptions.TryUpdateTopologyMonitorSubscription(subscriberSessionId, isSub: false, 1000, null, out var message);
             return Ok(new
             {
                 success = true,
@@ -95,17 +96,17 @@ namespace GrpcHttp3Demo.Controllers.Client
             return _authService.TryAuthorizeAdmin(Request.Headers.Authorization.ToString(), out _);
         }
 
-        private static string? NormalizeLinkId(string? linkId)
+        private static string? NormalizeTopologyId(string? topologyId)
         {
-            var normalized = linkId?.Trim();
+            var normalized = topologyId?.Trim();
             return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
         }
     }
 
-    public sealed class LinkMonitorSubscriptionRequest
+    public sealed class TopologyMonitorSubscriptionRequest
     {
         public string SubscriberSessionId { get; set; } = string.Empty;
-        public string? LinkId { get; set; }
+        public string? TopologyId { get; set; }
         public int? IntervalMs { get; set; }
     }
 }
