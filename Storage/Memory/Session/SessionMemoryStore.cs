@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Net;
 using GrpcHttp3Demo.Models.Session;
 using GrpcHttp3Demo.Models.Udp;
@@ -17,11 +16,6 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, SubscriptionMeta>> _subscriptionMeta = new();
         private readonly ConcurrentDictionary<SessionIdentityKey, string> _identityIndex = new();
         private readonly ConcurrentDictionary<SessionIdentityKey, object> _identityGates = new();
-        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _forwardingTable = new();
-        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _poseForwardingTable = new();
-        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _audioForwardingTable = new();
-        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _telemetryLowRateForwardingTable = new();
-        private readonly ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> _telemetryHighRateForwardingTable = new();
         private readonly ConcurrentDictionary<IPEndPoint, UdpSourceRoute> _sourceRouteTable = new();
         private readonly ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> _feedbackRoute = new();
         private readonly ConcurrentDictionary<string, byte[]> _p2pSharedKeys = new();
@@ -36,11 +30,6 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
         internal ConcurrentDictionary<string, ConcurrentDictionary<string, SubscriptionMeta>> SubscriptionMeta => _subscriptionMeta;
         internal ConcurrentDictionary<SessionIdentityKey, string> IdentityIndex => _identityIndex;
         internal ConcurrentDictionary<SessionIdentityKey, object> IdentityGates => _identityGates;
-        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> ForwardingTable => _forwardingTable;
-        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> PoseForwardingTable => _poseForwardingTable;
-        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> AudioForwardingTable => _audioForwardingTable;
-        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> TelemetryLowRateForwardingTable => _telemetryLowRateForwardingTable;
-        internal ConcurrentDictionary<IPEndPoint, ImmutableArray<UdpForwardTarget>> TelemetryHighRateForwardingTable => _telemetryHighRateForwardingTable;
         internal ConcurrentDictionary<IPEndPoint, UdpSourceRoute> SourceRouteTable => _sourceRouteTable;
         internal ConcurrentDictionary<IPEndPoint, UdpFeedbackForwardTarget> FeedbackRoute => _feedbackRoute;
         internal ConcurrentDictionary<string, byte[]> P2pSharedKeys => _p2pSharedKeys;
@@ -75,34 +64,14 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
             return ok;
         }
 
-        public bool TryGetForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
-        {
-            return _forwardingTable.TryGetValue(sourceEndpoint, out targets);
-        }
-
-        public bool TryGetPoseForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
-        {
-            return _poseForwardingTable.TryGetValue(sourceEndpoint, out targets);
-        }
-
-        public bool TryGetAudioForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
-        {
-            return _audioForwardingTable.TryGetValue(sourceEndpoint, out targets);
-        }
-
-        public bool TryGetTelemetryLowRateForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
-        {
-            return _telemetryLowRateForwardingTable.TryGetValue(sourceEndpoint, out targets);
-        }
-
-        public bool TryGetTelemetryHighRateForwardTargets(IPEndPoint sourceEndpoint, out ImmutableArray<UdpForwardTarget> targets)
-        {
-            return _telemetryHighRateForwardingTable.TryGetValue(sourceEndpoint, out targets);
-        }
-
         public bool TryGetSourceRoute(IPEndPoint sourceEndpoint, out UdpSourceRoute? route)
         {
             return _sourceRouteTable.TryGetValue(sourceEndpoint, out route);
+        }
+
+        internal UdpSourceRoute GetOrCreateSourceRoute(IPEndPoint sourceEndpoint, string sourceSessionId)
+        {
+            return _sourceRouteTable.GetOrAdd(sourceEndpoint, endpoint => new UdpSourceRoute(sourceSessionId, endpoint));
         }
 
         public bool TryGetFeedbackForward(IPEndPoint vrEndpoint, out UdpFeedbackForwardTarget target)
@@ -126,17 +95,23 @@ namespace GrpcHttp3Demo.Storage.Memory.Session
                 publishersWithSubscriptionDetails = _subscriptionDetails.Count,
                 publishersWithSubscriptions = _subscriptionMeta.Count,
                 identityIndex = _identityIndex.Count,
-                forwardingTable = _forwardingTable.Count,
-                poseForwardingTable = _poseForwardingTable.Count,
-                audioForwardingTable = _audioForwardingTable.Count,
-                telemetryLowRateForwardingTable = _telemetryLowRateForwardingTable.Count,
-                telemetryHighRateForwardingTable = _telemetryHighRateForwardingTable.Count,
+                forwardingTable = CountSourceRoutes(0x01),
+                poseForwardingTable = CountSourceRoutes(0x02),
+                audioForwardingTable = CountSourceRoutes(0x04),
+                telemetryLowRateForwardingTable = CountSourceRoutes(0x05),
+                telemetryHighRateForwardingTable = CountSourceRoutes(0x06),
                 sourceRouteTable = _sourceRouteTable.Count,
+                sourceRouteMediaEntries = _sourceRouteTable.Values.Sum(route => route.RouteCount),
                 systemMonitorTargets = SystemMonitorTargets.Length,
                 linkMonitorTargets = LinkMonitorTargets.Length,
                 feedbackRoute = _feedbackRoute.Count,
                 p2pSharedKeys = _p2pSharedKeys.Count
             };
+        }
+
+        private int CountSourceRoutes(byte prefix)
+        {
+            return _sourceRouteTable.Values.Count(route => route.HasRoute(prefix));
         }
     }
 }

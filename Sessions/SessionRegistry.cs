@@ -10,17 +10,15 @@ namespace GrpcHttp3Demo.Sessions
     {
         private readonly SessionMemoryStore _memory;
         private readonly SessionPairing _pairing;
-        private readonly SessionRouting _routing;
-        private readonly SessionSubscription _subscriptions;
         private readonly PushChannelRegistry _pushChannels;
+        private readonly SessionRuntimeProjection _projection;
 
-        public SessionRegistry(SessionMemoryStore memory, SessionPairing pairing, SessionRouting routing, SessionSubscription subscriptions, PushChannelRegistry pushChannels)
+        public SessionRegistry(SessionMemoryStore memory, SessionPairing pairing, PushChannelRegistry pushChannels, SessionRuntimeProjection projection)
         {
             _memory = memory;
             _pairing = pairing;
-            _routing = routing;
-            _subscriptions = subscriptions;
             _pushChannels = pushChannels;
+            _projection = projection;
         }
 
         public DeviceContext? GetSession(string sessionId)
@@ -80,17 +78,12 @@ namespace GrpcHttp3Demo.Sessions
             }
 
             _pushChannels.Detach(sessionId);
+            _projection.DeleteAllLinksForSession(sessionId);
             _pairing.UnpairSession(sessionId);
-            _routing.RemoveFeedbackRoute(sessionId);
 
             if (context.UdpEndpoint != null)
             {
                 _memory.EndpointIndex.TryRemove(context.UdpEndpoint, out _);
-                _memory.ForwardingTable.TryRemove(context.UdpEndpoint, out _);
-                _memory.PoseForwardingTable.TryRemove(context.UdpEndpoint, out _);
-                _memory.AudioForwardingTable.TryRemove(context.UdpEndpoint, out _);
-                _memory.TelemetryLowRateForwardingTable.TryRemove(context.UdpEndpoint, out _);
-                _memory.TelemetryHighRateForwardingTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.SourceRouteTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.FeedbackRoute.TryRemove(context.UdpEndpoint, out _);
             }
@@ -115,11 +108,10 @@ namespace GrpcHttp3Demo.Sessions
 
             foreach (var publisherSessionId in affectedPublishers)
             {
-                _routing.RebuildForwardingForPublisher(publisherSessionId);
+                _projection.ReconcilePublisherAfterSubscriberRemoved(publisherSessionId);
             }
 
-            _subscriptions.RebuildSystemMonitorTargets();
-            _subscriptions.RebuildLinkMonitorTargets();
+            _projection.ReconcileMonitorTargets();
 
             Console.WriteLine($"[SessionRegistry] Unregistered session: {sessionId}");
         }

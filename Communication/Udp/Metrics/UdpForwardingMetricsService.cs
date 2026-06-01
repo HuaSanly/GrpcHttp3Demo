@@ -166,51 +166,54 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         }
     }
 
+    public readonly struct UdpMediaForwardRoute
+    {
+        public ImmutableArray<UdpForwardTarget> Targets { get; }
+        public UdpRuntimeLink IngressLink { get; }
+
+        public UdpMediaForwardRoute(ImmutableArray<UdpForwardTarget> targets, UdpRuntimeLink ingressLink)
+        {
+            Targets = targets;
+            IngressLink = ingressLink;
+        }
+    }
+
     public sealed class UdpSourceRoute
     {
+        private readonly ConcurrentDictionary<byte, UdpMediaForwardRoute> _mediaRoutes = new();
         private long _nextDataActivityTickMs;
         private long _nextDackTickMs;
 
-        public UdpSourceRoute(
-            string sourceSessionId,
-            IPEndPoint sourceEndpoint,
-            ImmutableArray<UdpForwardTarget> videoTargets,
-            ImmutableArray<UdpForwardTarget> poseTargets,
-            ImmutableArray<UdpForwardTarget> audioTargets,
-            ImmutableArray<UdpForwardTarget> telemetryLowRateTargets,
-            ImmutableArray<UdpForwardTarget> telemetryHighRateTargets,
-            UdpRuntimeLink videoIngressLink,
-            UdpRuntimeLink poseIngressLink,
-            UdpRuntimeLink audioIngressLink,
-            UdpRuntimeLink telemetryLowRateIngressLink,
-            UdpRuntimeLink telemetryHighRateIngressLink)
+        public UdpSourceRoute(string sourceSessionId, IPEndPoint sourceEndpoint)
         {
             SourceSessionId = sourceSessionId;
             SourceEndpoint = sourceEndpoint;
-            VideoTargets = videoTargets;
-            PoseTargets = poseTargets;
-            AudioTargets = audioTargets;
-            TelemetryLowRateTargets = telemetryLowRateTargets;
-            TelemetryHighRateTargets = telemetryHighRateTargets;
-            VideoIngressLink = videoIngressLink;
-            PoseIngressLink = poseIngressLink;
-            AudioIngressLink = audioIngressLink;
-            TelemetryLowRateIngressLink = telemetryLowRateIngressLink;
-            TelemetryHighRateIngressLink = telemetryHighRateIngressLink;
         }
 
         public string SourceSessionId { get; }
         public IPEndPoint SourceEndpoint { get; }
-        public ImmutableArray<UdpForwardTarget> VideoTargets { get; }
-        public ImmutableArray<UdpForwardTarget> PoseTargets { get; }
-        public ImmutableArray<UdpForwardTarget> AudioTargets { get; }
-        public ImmutableArray<UdpForwardTarget> TelemetryLowRateTargets { get; }
-        public ImmutableArray<UdpForwardTarget> TelemetryHighRateTargets { get; }
-        public UdpRuntimeLink VideoIngressLink { get; }
-        public UdpRuntimeLink PoseIngressLink { get; }
-        public UdpRuntimeLink AudioIngressLink { get; }
-        public UdpRuntimeLink TelemetryLowRateIngressLink { get; }
-        public UdpRuntimeLink TelemetryHighRateIngressLink { get; }
+
+        public int RouteCount => _mediaRoutes.Count;
+
+        public bool TryGetRoute(byte prefix, out UdpMediaForwardRoute route)
+        {
+            return _mediaRoutes.TryGetValue(prefix, out route);
+        }
+
+        public void SetRoute(byte prefix, UdpMediaForwardRoute route)
+        {
+            _mediaRoutes[prefix] = route;
+        }
+
+        public bool HasRoute(byte prefix)
+        {
+            return _mediaRoutes.ContainsKey(prefix);
+        }
+
+        public void RemoveRoute(byte prefix)
+        {
+            _mediaRoutes.TryRemove(prefix, out _);
+        }
 
         public bool TryMarkDataActivityDue(long nowTickMs, long intervalMs)
         {

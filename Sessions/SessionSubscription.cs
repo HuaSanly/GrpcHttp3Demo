@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using GrpcHttp3Demo.Communication.Udp.Metrics;
 using GrpcHttp3Demo.Models.Session;
-using GrpcHttp3Demo.Models.Udp;
 using GrpcHttp3Demo.Storage.Memory.Session;
 
 namespace GrpcHttp3Demo.Sessions
@@ -11,14 +10,12 @@ namespace GrpcHttp3Demo.Sessions
     public sealed class SessionSubscription
     {
         private readonly SessionMemoryStore _memory;
-        private readonly SessionRouting _routing;
-        private readonly UdpLinkMetricsService _linkMetrics;
+        private readonly SessionRuntimeProjection _projection;
 
-        public SessionSubscription(SessionMemoryStore memory, SessionRouting routing, UdpLinkMetricsService linkMetrics)
+        public SessionSubscription(SessionMemoryStore memory, SessionRuntimeProjection projection)
         {
             _memory = memory;
-            _routing = routing;
-            _linkMetrics = linkMetrics;
+            _projection = projection;
         }
 
         public void UpdateSubscription(string publisherSessionId, string subscriberSessionId, bool isSub, bool subVideo, bool subPose, bool subAudio, bool subTelemetryLowRate, bool subTelemetryHighRate)
@@ -27,6 +24,18 @@ namespace GrpcHttp3Demo.Sessions
             {
                 return;
             }
+
+            _memory.SubscriptionMeta.TryGetValue(publisherSessionId, out var existingMeta);
+            SubscriptionMeta? previousMeta = null;
+            existingMeta?.TryGetValue(subscriberSessionId, out previousMeta);
+            var changedMediaKinds = GetChangedMediaKinds(
+                previousMeta,
+                isSub,
+                subVideo,
+                subPose,
+                subAudio,
+                subTelemetryLowRate,
+                subTelemetryHighRate);
 
             if (isSub)
             {
@@ -53,7 +62,7 @@ namespace GrpcHttp3Demo.Sessions
                     LastUpdatedUtc = DateTime.UtcNow
                 };
 
-                _routing.RebuildForwardingForPublisher(publisherSessionId);
+                _projection.OnSubscriptionChanged(publisherSessionId, subscriberSessionId, changedMediaKinds);
                 Console.WriteLine($"[SessionSubscription] {subscriberSessionId} subscribed to {publisherSessionId} (V:{subVideo} P:{subPose} A:{subAudio} TL:{subTelemetryLowRate} TH:{subTelemetryHighRate})");
                 return;
             }
@@ -68,8 +77,27 @@ namespace GrpcHttp3Demo.Sessions
                 currentMeta.TryRemove(subscriberSessionId, out _);
             }
 
-            _routing.RebuildForwardingForPublisher(publisherSessionId);
+            _projection.OnSubscriptionChanged(publisherSessionId, subscriberSessionId, changedMediaKinds);
             Console.WriteLine($"[SessionSubscription] {subscriberSessionId} unsubscribed from {publisherSessionId}");
+        }
+
+        private static UdpLinkMediaKind[] GetChangedMediaKinds(SubscriptionMeta? previousMeta, bool isSub, bool subVideo, bool subPose, bool subAudio, bool subTelemetryLowRate, bool subTelemetryHighRate)
+        {
+            var result = new List<UdpLinkMediaKind>(5);
+            AddIfChanged(result, UdpLinkMediaKind.Video, previousMeta?.SubVideo ?? false, isSub && subVideo);
+            AddIfChanged(result, UdpLinkMediaKind.Pose, previousMeta?.SubPose ?? false, isSub && subPose);
+            AddIfChanged(result, UdpLinkMediaKind.Audio, previousMeta?.SubAudio ?? false, isSub && subAudio);
+            AddIfChanged(result, UdpLinkMediaKind.TelemetryLowRate, previousMeta?.SubTelemetryLowRate ?? false, isSub && subTelemetryLowRate);
+            AddIfChanged(result, UdpLinkMediaKind.TelemetryHighRate, previousMeta?.SubTelemetryHighRate ?? false, isSub && subTelemetryHighRate);
+            return result.ToArray();
+        }
+
+        private static void AddIfChanged(List<UdpLinkMediaKind> result, UdpLinkMediaKind mediaKind, bool previous, bool current)
+        {
+            if (previous != current)
+            {
+                result.Add(mediaKind);
+            }
         }
 
         public List<string> GetSubscribers(string publisherSessionId)
@@ -129,7 +157,7 @@ namespace GrpcHttp3Demo.Sessions
                     LastUpdatedUtc = DateTime.UtcNow
                 };
 
-                RebuildSystemMonitorTargets();
+                _projection.ReconcileSystemMonitorTargets();
                 message = "Subscribed";
                 return true;
             }
@@ -144,7 +172,7 @@ namespace GrpcHttp3Demo.Sessions
                 currentMeta.TryRemove(subscriberSessionId, out _);
             }
 
-            RebuildSystemMonitorTargets();
+            _projection.ReconcileSystemMonitorTargets();
             message = "Unsubscribed";
             return true;
         }
@@ -190,7 +218,7 @@ namespace GrpcHttp3Demo.Sessions
                     LastUpdatedUtc = DateTime.UtcNow
                 };
 
-                RebuildLinkMonitorTargets();
+                _projection.ReconcileTopologyMonitorTargets();
                 message = "Subscribed";
                 return true;
             }
@@ -205,66 +233,9 @@ namespace GrpcHttp3Demo.Sessions
                 currentMeta.TryRemove(subscriberSessionId, out _);
             }
 
-            RebuildLinkMonitorTargets();
+            _projection.ReconcileTopologyMonitorTargets();
             message = "Unsubscribed";
             return true;
-        }
-
-        public void RebuildSystemMonitorTargets()
-        {
-            _linkMetrics.DeactivateLinksForOrigin(SystemPublishers.MonitorPublisherSessionId);
-
-            if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.MonitorPublisherSessionId, out var subscriptions))
-            {
-                _memory.SetSystemMonitorTargets(Array.Empty<UdpSystemMonitorTarget>());
-                return;
-            }
-
-            var targets = new List<UdpSystemMonitorTarget>(subscriptions.Count);
-            foreach (var item in subscriptions.Values)
-            {
-                if (item.SystemMonitorTopics == SystemMonitorTopicMask.None) continue;
-                if (!_memory.Sessions.TryGetValue(item.SubscriberId, out var subscriber) || subscriber.UdpEndpoint == null) continue;
-                var link = _linkMetrics.GetOrCreateSystemMonitorLink(item.SubscriberId);
-
-                targets.Add(new UdpSystemMonitorTarget(
-                    item.SubscriberId,
-                    subscriber.UdpEndpoint,
-                    item.SystemMonitorTopics,
-                    item.SystemMonitorIntervalMs,
-                    link));
-            }
-
-            _memory.SetSystemMonitorTargets(targets.ToArray());
-        }
-
-        public void RebuildLinkMonitorTargets()
-        {
-            _linkMetrics.DeactivateLinksForOrigin(SystemPublishers.LinkMonitorPublisherSessionId);
-
-            if (!_memory.SubscriptionDetails.TryGetValue(SystemPublishers.LinkMonitorPublisherSessionId, out var subscriptions))
-            {
-                _memory.SetLinkMonitorTargets(Array.Empty<UdpTopologyMonitorTarget>());
-                return;
-            }
-
-            var targets = new List<UdpTopologyMonitorTarget>(subscriptions.Count);
-            foreach (var item in subscriptions.Values)
-            {
-                if (!_memory.Sessions.TryGetValue(item.SubscriberId, out var subscriber) || subscriber.UdpEndpoint == null) continue;
-                var normalizedTopologyId = NormalizeTopologyId(item.LinkMonitorTopologyId);
-                if (string.IsNullOrWhiteSpace(normalizedTopologyId)) continue;
-
-                var link = _linkMetrics.GetOrCreateTopologyMonitorLink(SystemPublishers.LinkMonitorPublisherSessionId, item.SubscriberId);
-                targets.Add(new UdpTopologyMonitorTarget(
-                    item.SubscriberId,
-                    subscriber.UdpEndpoint,
-                    item.SystemMonitorIntervalMs,
-                    normalizedTopologyId,
-                    link));
-            }
-
-            _memory.SetLinkMonitorTargets(targets.ToArray());
         }
 
         public IReadOnlyCollection<object> ListSystemMonitorSubscriptions()

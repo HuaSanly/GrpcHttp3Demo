@@ -25,7 +25,7 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
 
         [HttpGet("/api/monitor/udp/topologies")]
         [HttpGet("/api/monitor/udp/links")]
-        public IActionResult List([FromQuery] bool activeOnly = false)
+        public IActionResult List()
         {
             var monitoringEnabled = _env.IsDevelopment() || _configuration.GetValue<bool>("Monitoring:Enabled", false);
             if (!monitoringEnabled) return NotFound();
@@ -33,8 +33,7 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
             return Ok(new
             {
                 updatedUtc = _links.LastTickUtc,
-                activeOnly,
-                items = _links.SnapshotTopologies(activeOnly)
+                items = _links.SnapshotTopologies()
                     .Select(BuildTopologyItem)
                     .ToArray()
             });

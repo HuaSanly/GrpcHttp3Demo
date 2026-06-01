@@ -9,15 +9,13 @@ namespace GrpcHttp3Demo.Communication.Udp.Binding
     public sealed class UdpSessionBindingService
     {
         private readonly SessionMemoryStore _memory;
-        private readonly SessionRouting _routing;
-        private readonly SessionSubscription _subscriptions;
+        private readonly SessionRuntimeProjection _projection;
         private readonly PushChannelRegistry _pushChannels;
 
-        public UdpSessionBindingService(SessionMemoryStore memory, SessionRouting routing, SessionSubscription subscriptions, PushChannelRegistry pushChannels)
+        public UdpSessionBindingService(SessionMemoryStore memory, SessionRuntimeProjection projection, PushChannelRegistry pushChannels)
         {
             _memory = memory;
-            _routing = routing;
-            _subscriptions = subscriptions;
+            _projection = projection;
             _pushChannels = pushChannels;
         }
 
@@ -40,10 +38,8 @@ namespace GrpcHttp3Demo.Communication.Udp.Binding
             if (context.UdpEndpoint != null)
             {
                 _memory.EndpointIndex.TryRemove(context.UdpEndpoint, out _);
-                _memory.ForwardingTable.TryRemove(context.UdpEndpoint, out _);
-                _memory.PoseForwardingTable.TryRemove(context.UdpEndpoint, out _);
-                _memory.AudioForwardingTable.TryRemove(context.UdpEndpoint, out _);
                 _memory.SourceRouteTable.TryRemove(context.UdpEndpoint, out _);
+                _memory.FeedbackRoute.TryRemove(context.UdpEndpoint, out _);
                 _memory.SessionEndpointIndex.TryRemove(sessionId, out _);
             }
 
@@ -51,13 +47,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Binding
             _memory.EndpointIndex[endpoint] = sessionId;
             _memory.SessionEndpointIndex[sessionId] = endpoint;
 
-            _routing.RefreshFeedbackRoute(sessionId);
-            if (_memory.Pairings.TryGetValue(sessionId, out var partnerSessionId)) _routing.RefreshFeedbackRoute(partnerSessionId);
-
-            _routing.RebuildForwardingForPublisher(sessionId);
-            _routing.RebuildForwardingForSubscriber(sessionId);
-            _subscriptions.RebuildSystemMonitorTargets();
-            _subscriptions.RebuildLinkMonitorTargets();
+            _projection.ReconcileUdpEndpointChanged(sessionId);
 
             Console.WriteLine($"[UDP] Registered endpoint: session {sessionId} -> {endpoint}");
         }
@@ -89,18 +79,12 @@ namespace GrpcHttp3Demo.Communication.Udp.Binding
                 if (oldEndpoint != null)
                 {
                     _memory.EndpointIndex.TryRemove(oldEndpoint, out _);
-                    _memory.ForwardingTable.TryRemove(oldEndpoint, out _);
-                    _memory.PoseForwardingTable.TryRemove(oldEndpoint, out _);
-                    _memory.AudioForwardingTable.TryRemove(oldEndpoint, out _);
                     _memory.SourceRouteTable.TryRemove(oldEndpoint, out _);
                     _memory.FeedbackRoute.TryRemove(oldEndpoint, out _);
                 }
 
-                _routing.RemoveFeedbackRoute(sessionId);
-
                 _memory.SessionEndpointIndex.TryRemove(sessionId, out _);
-                _subscriptions.RebuildSystemMonitorTargets();
-                _subscriptions.RebuildLinkMonitorTargets();
+                _projection.ReconcileUdpEndpointExpired(sessionId);
 
                 if (!_pushChannels.IsConnected(sessionId)) continue;
                 if (context.UdpRescueCount >= maxRescues) continue;

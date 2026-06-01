@@ -2,7 +2,6 @@ using GrpcHttp3Demo.Communication.Grpc.Monitoring;
 using GrpcHttp3Demo.Sessions;
 using GrpcHttp3Demo.Communication.Udp.Metrics;
 using GrpcHttp3Demo.Storage.Memory.Session;
-using GrpcHttp3Demo.Utils;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GrpcHttp3Demo.Controllers.Monitoring
@@ -48,10 +47,6 @@ namespace GrpcHttp3Demo.Controllers.Monitoring
                     name = _environment.EnvironmentName,
                     isDevelopment = _environment.IsDevelopment(),
                     isProduction = _environment.IsProduction()
-                },
-                mode = new
-                {
-                    broadcastToAllEffective = AppConfig.IsBroadcastToAll
                 },
                 online = _presence.GetOnlineRoleSnapshot(onlineTimeout),
                 runtimeTables = _memory.Snapshot(),

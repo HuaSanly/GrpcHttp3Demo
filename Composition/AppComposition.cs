@@ -5,7 +5,6 @@ using GrpcHttp3Demo.Communication.WebSockets;
 using GrpcHttp3Demo.Controllers;
 using GrpcHttp3Demo.Sessions;
 using GrpcHttp3Demo.Storage;
-using GrpcHttp3Demo.Utils;
 
 namespace GrpcHttp3Demo.Composition
 {
@@ -53,7 +52,6 @@ namespace GrpcHttp3Demo.Composition
         public static WebApplication UseMiddlewareModule(this WebApplication app)
         {
             app
-                .UseAppConfigModule()
                 .UseWebSocketsModule()
                 .UseHttpApiModule();
 

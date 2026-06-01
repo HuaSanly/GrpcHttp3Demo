@@ -8,12 +8,12 @@ namespace GrpcHttp3Demo.Sessions
     public sealed class SessionPairing
     {
         private readonly SessionMemoryStore _memory;
-        private readonly SessionRouting _routing;
+        private readonly SessionRuntimeProjection _projection;
 
-        public SessionPairing(SessionMemoryStore memory, SessionRouting routing)
+        public SessionPairing(SessionMemoryStore memory, SessionRuntimeProjection projection)
         {
             _memory = memory;
-            _routing = routing;
+            _projection = projection;
         }
 
         public byte[] GetOrCreateP2pSharedKey(string sessionA, string sessionB)
@@ -71,10 +71,7 @@ namespace GrpcHttp3Demo.Sessions
 
             Console.WriteLine($"[SessionPairing] Paired sessions: {sessionA} <-> {sessionB}");
 
-            _routing.RefreshFeedbackRoute(sessionA);
-            _routing.RefreshFeedbackRoute(sessionB);
-            _routing.RebuildForwardingForPublisher(sessionA);
-            _routing.RebuildForwardingForPublisher(sessionB);
+            _projection.OnPaired(sessionA, sessionB);
         }
 
         public void UnpairSession(string sessionId)
@@ -90,10 +87,7 @@ namespace GrpcHttp3Demo.Sessions
             if (_memory.Sessions.TryGetValue(sessionId, out var context)) context.PairedDeviceId = null;
             if (_memory.Sessions.TryGetValue(partnerSessionId, out var partner)) partner.PairedDeviceId = null;
 
-            _routing.RemoveFeedbackRoute(sessionId, partnerSessionId);
-            _routing.RemoveFeedbackRoute(partnerSessionId, sessionId);
-            _routing.RebuildForwardingForPublisher(sessionId);
-            _routing.RebuildForwardingForPublisher(partnerSessionId);
+            _projection.OnUnpaired(sessionId, partnerSessionId);
 
             Console.WriteLine($"[SessionPairing] Unpaired sessions: {sessionId} <-> {partnerSessionId}");
         }

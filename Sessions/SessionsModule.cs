@@ -10,7 +10,10 @@ namespace GrpcHttp3Demo.Sessions
         public static IServiceCollection AddSessionsModule(this IServiceCollection services)
         {
             services.AddSingleton(sp => SessionLivenessOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+            services.AddSingleton(sp => PairingAutoSubscribeOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+            services.AddSingleton<PairingAutoSubscribeService>();
             services.AddSingleton<SessionRouting>();
+            services.AddSingleton<SessionRuntimeProjection>();
             services.AddSingleton<SessionPairing>();
             services.AddSingleton<SessionSubscription>();
             services.AddSingleton<SessionRegistry>();

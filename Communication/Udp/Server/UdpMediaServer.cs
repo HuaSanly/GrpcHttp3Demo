@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text;
 using System.Security.Cryptography;
@@ -264,7 +265,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
 
         private byte[] BuildTopologyMonitorPayload(UdpTopologyMonitorTarget target)
         {
-            var linkSnapshot = _linkMetrics.SnapshotByTopologyId(target.TopologyId, activeOnly: true);
+            var linkSnapshot = _linkMetrics.SnapshotByTopologyId(target.TopologyId);
 
             var envelope = new
             {
@@ -275,7 +276,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 prefix = "0x08",
                 topics = new[] { "udp_link_metrics" },
                 linksUpdatedUtc = _linkMetrics.LastTickUtc,
-                activeOnly = true,
                 subscribedTopologyId = target.TopologyId,
                 links = linkSnapshot
             };
@@ -373,145 +373,36 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                             continue;
                     }
 
+                    if (!TryMapMediaKind(prefix, out var mediaKind))
+                    {
+                        continue;
+                    }
+
                     if (!_memory.TryGetSourceRoute(remoteEp, out var route) || route == null)
                     {
-                        if (TryMapMediaKind(prefix, out var missingMediaKind))
-                        {
-                            RecordIngressRouteMiss(remoteEp, missingMediaKind, length, UdpLinkFailureKind.NoRoute);
-                        }
-
+                        RecordIngressRouteMiss(remoteEp, mediaKind, length, UdpLinkFailureKind.NoRoute);
                         continue;
                     }
 
-                    // 4. Video from Robot (0x01): forward using prebuilt ep -> targets
-                    if (prefix == 0x01)
+                    RecordDataActivityAndMaybeDack(route, remoteEp);
+
+                    if (!route.TryGetRoute(prefix, out var mediaRoute))
                     {
-                        RecordDataActivityAndMaybeDack(route, remoteEp);
-                        route.VideoIngressLink.RecordReceived(length);
-
-                        var targets = route.VideoTargets;
-                        if (targets.Length == 0)
-                        {
-                            route.VideoIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
-                            continue;
-                        }
-
-                        route.VideoIngressLink.RecordRouteMatched(length);
-                        byte[]? queuedPayload = null;
-                        for (var i = 0; i < targets.Length; i++)
-                        {
-                            var dest = targets[i];
-                            dest.Counter.RecordVideo(length);
-                            dest.Link.RecordForwardPlanned(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
-                        }
-
+                        RecordIngressRouteMiss(remoteEp, mediaKind, length, UdpLinkFailureKind.NoRoute);
                         continue;
                     }
 
-                    // 5. Pose from VR (0x02): forward using prebuilt ep -> pose targets
-                    if (prefix == 0x02)
+                    mediaRoute.IngressLink.RecordReceived(length);
+
+                    var targets = mediaRoute.Targets;
+                    if (targets.Length == 0)
                     {
-                        RecordDataActivityAndMaybeDack(route, remoteEp);
-                        route.PoseIngressLink.RecordReceived(length);
-
-                        var targets = route.PoseTargets;
-                        if (targets.Length == 0)
-                        {
-                            route.PoseIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
-                            continue;
-                        }
-
-                        route.PoseIngressLink.RecordRouteMatched(length);
-                        byte[]? queuedPayload = null;
-                        for (var i = 0; i < targets.Length; i++)
-                        {
-                            var dest = targets[i];
-                            dest.Counter.RecordPose(length);
-                            dest.Link.RecordForwardPlanned(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
-                        }
-
+                        mediaRoute.IngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
                         continue;
                     }
 
-                    // 6. Audio from publisher (0x04): forward using prebuilt ep -> audio targets
-                    if (prefix == 0x04)
-                    {
-                        RecordDataActivityAndMaybeDack(route, remoteEp);
-                        route.AudioIngressLink.RecordReceived(length);
-
-                        var targets = route.AudioTargets;
-                        if (targets.Length == 0)
-                        {
-                            route.AudioIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
-                            continue;
-                        }
-
-                        route.AudioIngressLink.RecordRouteMatched(length);
-                        byte[]? queuedPayload = null;
-                        for (var i = 0; i < targets.Length; i++)
-                        {
-                            var dest = targets[i];
-                            dest.Counter.RecordAudio(length);
-                            dest.Link.RecordForwardPlanned(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
-                        }
-
-                        continue;
-                    }
-
-                    // 7. Robot telemetry low rate (0x05): forward using prebuilt ep -> telemetry low-rate targets
-                    if (prefix == 0x05)
-                    {
-                        RecordDataActivityAndMaybeDack(route, remoteEp);
-                        route.TelemetryLowRateIngressLink.RecordReceived(length);
-
-                        var targets = route.TelemetryLowRateTargets;
-                        if (targets.Length == 0)
-                        {
-                            route.TelemetryLowRateIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
-                            continue;
-                        }
-
-                        route.TelemetryLowRateIngressLink.RecordRouteMatched(length);
-                        byte[]? queuedPayload = null;
-                        for (var i = 0; i < targets.Length; i++)
-                        {
-                            var dest = targets[i];
-                            dest.Counter.RecordTelemetry(length);
-                            dest.Link.RecordForwardPlanned(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
-                        }
-
-                        continue;
-                    }
-
-                    // 8. Robot telemetry high rate (0x06): forward using prebuilt ep -> telemetry high-rate targets
-                    if (prefix == 0x06)
-                    {
-                        RecordDataActivityAndMaybeDack(route, remoteEp);
-                        route.TelemetryHighRateIngressLink.RecordReceived(length);
-
-                        var targets = route.TelemetryHighRateTargets;
-                        if (targets.Length == 0)
-                        {
-                            route.TelemetryHighRateIngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
-                            continue;
-                        }
-
-                        route.TelemetryHighRateIngressLink.RecordRouteMatched(length);
-                        byte[]? queuedPayload = null;
-                        for (var i = 0; i < targets.Length; i++)
-                        {
-                            var dest = targets[i];
-                            dest.Counter.RecordTelemetry(length);
-                            dest.Link.RecordForwardPlanned(length);
-                            SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
-                        }
-
-                        continue;
-                    }
+                    mediaRoute.IngressLink.RecordRouteMatched(length);
+                    ForwardMediaTargets(mediaKind, targets, buffer, length, prefix);
                 }
                 catch (ObjectDisposedException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -525,6 +416,38 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 {
                     _logger.LogError(ex, "UDP Receive Error");
                 }
+            }
+        }
+
+        private void ForwardMediaTargets(UdpLinkMediaKind mediaKind, ImmutableArray<UdpForwardTarget> targets, byte[] buffer, int length, byte prefix)
+        {
+            byte[]? queuedPayload = null;
+            for (var i = 0; i < targets.Length; i++)
+            {
+                var dest = targets[i];
+                RecordForwardCounter(dest.Counter, mediaKind, length);
+                dest.Link.RecordForwardPlanned(length);
+                SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
+            }
+        }
+
+        private static void RecordForwardCounter(ForwardEdgeCounter counter, UdpLinkMediaKind mediaKind, int length)
+        {
+            switch (mediaKind)
+            {
+                case UdpLinkMediaKind.Video:
+                    counter.RecordVideo(length);
+                    break;
+                case UdpLinkMediaKind.Pose:
+                    counter.RecordPose(length);
+                    break;
+                case UdpLinkMediaKind.Audio:
+                    counter.RecordAudio(length);
+                    break;
+                case UdpLinkMediaKind.TelemetryLowRate:
+                case UdpLinkMediaKind.TelemetryHighRate:
+                    counter.RecordTelemetry(length);
+                    break;
             }
         }
 
@@ -598,7 +521,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 return;
             }
 
-            var link = _linkMetrics.GetOrCreateIngressLink(sessionId, mediaKind);
+            if (!_linkMetrics.TryGetIngressLink(sessionId, mediaKind, out var link) || link == null)
+            {
+                return;
+            }
+
             link.RecordReceived(length);
             link.RecordRouteMiss(length, reason);
         }

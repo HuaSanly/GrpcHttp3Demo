@@ -83,6 +83,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             return GetOrCreate(new UdpLinkKey(originSessionId, originSessionId, ServerNodeId, UdpLinkDirection.Ingress, mediaKind));
         }
 
+        public bool TryGetIngressLink(string originSessionId, UdpLinkMediaKind mediaKind, out UdpRuntimeLink? link)
+        {
+            return _links.TryGetValue(new UdpLinkKey(originSessionId, originSessionId, ServerNodeId, UdpLinkDirection.Ingress, mediaKind), out link);
+        }
+
         public UdpRuntimeLink GetOrCreateEgressLink(string originSessionId, string targetSessionId, UdpLinkMediaKind mediaKind)
         {
             return GetOrCreate(new UdpLinkKey(originSessionId, ServerNodeId, targetSessionId, UdpLinkDirection.Egress, mediaKind));
@@ -103,29 +108,56 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             return GetOrCreate(new UdpLinkKey(originSessionId, ServerNodeId, targetSessionId, UdpLinkDirection.Egress, UdpLinkMediaKind.TopologyMonitor));
         }
 
-        public void DeactivateLinksForOrigin(string originSessionId)
+        public void DeleteLinksForOrigin(string originSessionId)
         {
-            foreach (var link in _links.Values)
+            var keysToRemove = new List<UdpLinkKey>();
+            foreach (var kvp in _links)
             {
-                if (string.Equals(link.OriginSessionId, originSessionId, StringComparison.Ordinal))
-                {
-                    link.SetActive(false);
-                }
+                if (string.Equals(kvp.Key.OriginSessionId, originSessionId, StringComparison.Ordinal))
+                    keysToRemove.Add(kvp.Key);
             }
+            foreach (var key in keysToRemove)
+                _links.TryRemove(key, out _);
         }
 
-        public void DeactivateLink(UdpLinkKey key)
+        public void DeleteLinksForSession(string sessionId)
         {
-            if (_links.TryGetValue(key, out var link))
+            var keysToRemove = new List<UdpLinkKey>();
+            foreach (var kvp in _links)
             {
-                link.SetActive(false);
+                var key = kvp.Key;
+                if (string.Equals(key.OriginSessionId, sessionId, StringComparison.Ordinal)
+                    || string.Equals(key.SourceNodeId, sessionId, StringComparison.Ordinal)
+                    || string.Equals(key.TargetNodeId, sessionId, StringComparison.Ordinal))
+                    keysToRemove.Add(key);
             }
+            foreach (var key in keysToRemove)
+                _links.TryRemove(key, out _);
         }
 
-        public IReadOnlyCollection<object> SnapshotAll(bool activeOnly)
+        public void DeleteEgressLink(string originSessionId, string targetSessionId, UdpLinkMediaKind mediaKind)
+        {
+            var key = new UdpLinkKey(originSessionId, ServerNodeId, targetSessionId, UdpLinkDirection.Egress, mediaKind);
+            _links.TryRemove(key, out _);
+        }
+
+        public void DeleteIngressLink(string originSessionId, UdpLinkMediaKind mediaKind)
+        {
+            var key = new UdpLinkKey(originSessionId, originSessionId, ServerNodeId, UdpLinkDirection.Ingress, mediaKind);
+            _links.TryRemove(key, out _);
+        }
+
+        public bool HasAnyEgressLink(string originSessionId, UdpLinkMediaKind mediaKind)
+        {
+            return _links.Keys.Any(key =>
+                string.Equals(key.OriginSessionId, originSessionId, StringComparison.Ordinal)
+                && key.Direction == UdpLinkDirection.Egress
+                && key.MediaKind == mediaKind);
+        }
+
+        public IReadOnlyCollection<object> SnapshotAll()
         {
             return _links.Values
-                .Where(link => !activeOnly || link.Active)
                 .OrderBy(link => link.OriginSessionId, StringComparer.Ordinal)
                 .ThenBy(link => link.Direction)
                 .ThenBy(link => link.MediaKind)
@@ -134,7 +166,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 .ToArray<object>();
         }
 
-        public IReadOnlyCollection<object> SnapshotByLinkId(string? linkId, bool activeOnly)
+        public IReadOnlyCollection<object> SnapshotByLinkId(string? linkId)
         {
             if (string.IsNullOrWhiteSpace(linkId))
             {
@@ -142,7 +174,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             }
 
             return _links.Values
-                .Where(link => string.Equals(link.LinkId, linkId, StringComparison.Ordinal) && (!activeOnly || link.Active))
+                .Where(link => string.Equals(link.LinkId, linkId, StringComparison.Ordinal))
                 .OrderBy(link => link.OriginSessionId, StringComparer.Ordinal)
                 .ThenBy(link => link.Direction)
                 .ThenBy(link => link.MediaKind)
@@ -151,21 +183,21 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 .ToArray<object>();
         }
 
-        public IReadOnlyCollection<UdpTopologySnapshot> SnapshotTopologies(bool activeOnly)
+        public IReadOnlyCollection<UdpTopologySnapshot> SnapshotTopologies()
         {
-            return BuildTopologyGroups(activeOnly)
+            return BuildTopologyGroups()
                 .Select(group => group.ToSnapshot())
                 .ToArray();
         }
 
-        public IReadOnlyCollection<object> SnapshotByTopologyId(string? topologyId, bool activeOnly)
+        public IReadOnlyCollection<object> SnapshotByTopologyId(string? topologyId)
         {
             if (string.IsNullOrWhiteSpace(topologyId))
             {
                 return Array.Empty<object>();
             }
 
-            var group = BuildTopologyGroups(activeOnly)
+            var group = BuildTopologyGroups()
                 .FirstOrDefault(item => string.Equals(item.TopologyId, topologyId, StringComparison.Ordinal));
 
             if (group == null)
@@ -187,11 +219,9 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             _timer.Dispose();
         }
 
-        private List<UdpTopologyGroup> BuildTopologyGroups(bool activeOnly)
+        private List<UdpTopologyGroup> BuildTopologyGroups()
         {
-            var links = _links.Values
-                .Where(link => link.HasObservedMetrics() && (!activeOnly || link.Active))
-                .ToArray();
+            var links = _links.Values.ToArray();
 
             if (links.Length == 0)
             {
@@ -435,7 +465,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 .Select(group => new UdpTopologyEdgeSnapshot(
                     group.Key.SourceNodeId,
                     group.Key.TargetNodeId,
-                    group.Any(link => link.Active),
+                    true,
                     group
                         .Select(link => UdpLinkMetricsService.ToWireMediaName(link.MediaKind))
                         .Distinct(StringComparer.Ordinal)
@@ -447,7 +477,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
 
             return new UdpTopologySnapshot(
                 TopologyId,
-                Links.Any(link => link.Active),
+                Links.Count > 0,
                 Links.Min(link => link.FirstSeenUtc),
                 Links.Max(link => link.LastSeenUtc),
                 nodeIds,
@@ -478,7 +508,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         private readonly UdpEventCounter _socketError = new();
         private readonly UdpEventCounter _unknownError = new();
 
-        private long _active = 1;
         private long _lastSeenUnixMs;
 
         internal UdpRuntimeLink(UdpLinkKey key)
@@ -501,12 +530,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
         public UdpLinkMediaKind MediaKind { get; }
         public DateTime FirstSeenUtc { get; }
         internal DateTime LastSeenUtc => DateTimeOffset.FromUnixTimeMilliseconds(Volatile.Read(ref _lastSeenUnixMs)).UtcDateTime;
-        public bool Active => Volatile.Read(ref _active) == 1;
-
-        public void SetActive(bool active)
-        {
-            Volatile.Write(ref _active, active ? 1L : 0L);
-        }
 
         public void RecordReceived(int bytes)
         {
@@ -581,7 +604,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                 targetNodeId = TargetNodeId,
                 direction = Direction == UdpLinkDirection.Ingress ? "ingress" : "egress",
                 mediaKind = ToWireMediaName(MediaKind),
-                active = Active,
                 firstSeenUtc = FirstSeenUtc,
                 lastSeenUtc = LastSeenUtc,
                 received = _received.Snapshot(),
@@ -607,29 +629,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
                     unknown = _unknownError.Snapshot()
                 }
             };
-        }
-
-        internal bool HasObservedMetrics()
-        {
-            return _received.HasObserved
-                || _routeMatched.HasObserved
-                || _routeMiss.HasObserved
-                || _forwardPlanned.HasObserved
-                || _queueEnqueued.HasObserved
-                || _queueDropped.HasObserved
-                || _sendAttempt.HasObserved
-                || _sendSuccess.HasObserved
-                || _sendFail.HasObserved
-                || _retry.HasObserved
-                || _noRoute.HasObserved
-                || _noTarget.HasObserved
-                || _queueFull.HasObserved
-                || _noBufferSpace.HasObserved
-                || _hostUnreachable.HasObserved
-                || _networkUnreachable.HasObserved
-                || _timedOut.HasObserved
-                || _socketError.HasObserved
-                || _unknownError.HasObserved;
         }
 
         internal void Tick()
@@ -658,7 +657,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
 
         private void Touch()
         {
-            SetActive(true);
             Volatile.Write(ref _lastSeenUnixMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         }
 

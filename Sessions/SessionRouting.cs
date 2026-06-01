@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Net;
 using GrpcHttp3Demo.Communication.Udp.Metrics;
+using GrpcHttp3Demo.Models.Session;
 using GrpcHttp3Demo.Models.Udp;
 using GrpcHttp3Demo.Protos;
 using GrpcHttp3Demo.Storage.Memory.Session;
-using GrpcHttp3Demo.Utils;
 
 namespace GrpcHttp3Demo.Sessions
 {
@@ -14,6 +14,14 @@ namespace GrpcHttp3Demo.Sessions
         private readonly SessionMemoryStore _memory;
         private readonly UdpForwardingMetricsService _forwardingMetrics;
         private readonly UdpLinkMetricsService _linkMetrics;
+        private static readonly UdpLinkMediaKind[] ForwardedMediaKinds =
+        {
+            UdpLinkMediaKind.Video,
+            UdpLinkMediaKind.Pose,
+            UdpLinkMediaKind.Audio,
+            UdpLinkMediaKind.TelemetryLowRate,
+            UdpLinkMediaKind.TelemetryHighRate
+        };
 
         public SessionRouting(SessionMemoryStore memory, UdpForwardingMetricsService forwardingMetrics, UdpLinkMetricsService linkMetrics)
         {
@@ -22,134 +30,176 @@ namespace GrpcHttp3Demo.Sessions
             _linkMetrics = linkMetrics;
         }
 
+        public void ReconcileLinksBetween(string publisherId, string subscriberId)
+        {
+            if (!_memory.Sessions.TryGetValue(publisherId, out var publisher)) return;
+            if (!_memory.Sessions.TryGetValue(subscriberId, out var subscriber)) return;
+            if (string.Equals(publisherId, subscriberId, StringComparison.Ordinal)) return;
+
+            var wantVideo = false;
+            var wantPose = false;
+            var wantAudio = false;
+            var wantTelemetryLowRate = false;
+            var wantTelemetryHighRate = false;
+            var wantFeedback = false;
+
+            if (_memory.SubscriptionMeta.TryGetValue(publisherId, out var subscriptions)
+                && subscriptions.TryGetValue(subscriberId, out var meta))
+            {
+                wantVideo = meta.SubVideo;
+                wantPose = meta.SubPose;
+                wantAudio = meta.SubAudio;
+                wantTelemetryLowRate = meta.SubTelemetryLowRate;
+                wantTelemetryHighRate = meta.SubTelemetryHighRate;
+            }
+
+            if (publisher.Role == RegisterRequest.Types.EndpointType.Vr
+                && subscriber.Role == RegisterRequest.Types.EndpointType.Robot
+                && _memory.Pairings.TryGetValue(publisherId, out var fbTarget)
+                && string.Equals(fbTarget, subscriberId, StringComparison.Ordinal))
+            {
+                wantFeedback = true;
+            }
+
+            ReconcileEgressMedia(publisherId, subscriberId, UdpLinkMediaKind.Video, wantVideo);
+            ReconcileEgressMedia(publisherId, subscriberId, UdpLinkMediaKind.Pose, wantPose);
+            ReconcileEgressMedia(publisherId, subscriberId, UdpLinkMediaKind.Audio, wantAudio);
+            ReconcileEgressMedia(publisherId, subscriberId, UdpLinkMediaKind.TelemetryLowRate, wantTelemetryLowRate);
+            ReconcileEgressMedia(publisherId, subscriberId, UdpLinkMediaKind.TelemetryHighRate, wantTelemetryHighRate);
+            ReconcileEgressMedia(publisherId, subscriberId, UdpLinkMediaKind.Feedback, wantFeedback);
+
+            ReconcilePublisherIngress(publisherId);
+        }
+
+        private void ReconcileEgressMedia(string publisherId, string subscriberId, UdpLinkMediaKind mediaKind, bool wanted)
+        {
+            if (wanted)
+                _linkMetrics.GetOrCreateEgressLink(publisherId, subscriberId, mediaKind);
+            else
+                _linkMetrics.DeleteEgressLink(publisherId, subscriberId, mediaKind);
+        }
+
+        public void ReconcilePublisherIngress(string publisherId)
+        {
+            ReconcileIngressMedia(publisherId, UdpLinkMediaKind.Video);
+            ReconcileIngressMedia(publisherId, UdpLinkMediaKind.Pose);
+            ReconcileIngressMedia(publisherId, UdpLinkMediaKind.Audio);
+            ReconcileIngressMedia(publisherId, UdpLinkMediaKind.TelemetryLowRate);
+            ReconcileIngressMedia(publisherId, UdpLinkMediaKind.TelemetryHighRate);
+            ReconcileIngressMedia(publisherId, UdpLinkMediaKind.Feedback);
+        }
+
+        private void ReconcileIngressMedia(string publisherId, UdpLinkMediaKind mediaKind)
+        {
+            if (_linkMetrics.HasAnyEgressLink(publisherId, mediaKind))
+                _linkMetrics.GetOrCreateIngressLink(publisherId, mediaKind);
+            else
+                _linkMetrics.DeleteIngressLink(publisherId, mediaKind);
+        }
+
         public void RebuildForwardingForPublisher(string publisherSessionId)
         {
-            _linkMetrics.DeactivateLinksForOrigin(publisherSessionId);
+            RebuildForwardingForPublisher(publisherSessionId, ForwardedMediaKinds);
+        }
 
+        public void RebuildForwardingForPublisher(string publisherSessionId, IReadOnlyCollection<UdpLinkMediaKind> mediaKinds)
+        {
             if (!_memory.Sessions.TryGetValue(publisherSessionId, out var publisher) || publisher.UdpEndpoint == null)
             {
                 if (_memory.SessionEndpointIndex.TryGetValue(publisherSessionId, out var oldEndpoint))
                 {
-                    _memory.ForwardingTable.TryRemove(oldEndpoint, out _);
-                    _memory.PoseForwardingTable.TryRemove(oldEndpoint, out _);
-                    _memory.AudioForwardingTable.TryRemove(oldEndpoint, out _);
-                    _memory.TelemetryLowRateForwardingTable.TryRemove(oldEndpoint, out _);
-                    _memory.TelemetryHighRateForwardingTable.TryRemove(oldEndpoint, out _);
                     _memory.SourceRouteTable.TryRemove(oldEndpoint, out _);
                 }
                 return;
             }
 
             var sourceEndpoint = publisher.UdpEndpoint;
-            var targets = new Dictionary<string, (IPEndPoint endpoint, ForwardEdgeCounter counter, bool video, bool pose, bool audio, bool telemetryLowRate, bool telemetryHighRate)>();
+            var sourceRoute = _memory.GetOrCreateSourceRoute(sourceEndpoint, publisherSessionId);
 
-            void AddTarget(string targetSessionId, bool wantVideo, bool wantPose, bool wantAudio, bool wantTelemetryLowRate, bool wantTelemetryHighRate)
+            foreach (var mediaKind in mediaKinds)
             {
-                if (string.IsNullOrEmpty(targetSessionId)) return;
-                if (!_memory.Sessions.TryGetValue(targetSessionId, out var target) || target.UdpEndpoint == null) return;
-
-                var endpoint = target.UdpEndpoint;
-                if (endpoint.Equals(sourceEndpoint)) return;
-
-                if (targets.TryGetValue(targetSessionId, out var existing))
-                {
-                    targets[targetSessionId] = (existing.endpoint, existing.counter, existing.video || wantVideo, existing.pose || wantPose, existing.audio || wantAudio, existing.telemetryLowRate || wantTelemetryLowRate, existing.telemetryHighRate || wantTelemetryHighRate);
-                    return;
-                }
-
-                var counter = _forwardingMetrics.GetOrCreateEdge(publisherSessionId, targetSessionId);
-                targets[targetSessionId] = (endpoint, counter, wantVideo, wantPose, wantAudio, wantTelemetryLowRate, wantTelemetryHighRate);
+                RebuildForwardingForPublisherMedia(publisherSessionId, sourceEndpoint, sourceRoute, mediaKind);
             }
+        }
 
-            if (_memory.Pairings.TryGetValue(publisherSessionId, out var pairedSessionId))
-            {
-                AddTarget(pairedSessionId, wantVideo: true, wantPose: true, wantAudio: true, wantTelemetryLowRate: true, wantTelemetryHighRate: true);
-            }
+        private void RebuildForwardingForPublisherMedia(string publisherSessionId, IPEndPoint sourceEndpoint, UdpSourceRoute sourceRoute, UdpLinkMediaKind mediaKind)
+        {
+            if (!TryGetForwardingPrefix(mediaKind, out var prefix)) return;
+
+            var hasSubscription = false;
+            var targets = new List<UdpForwardTarget>();
 
             if (_memory.SubscriptionMeta.TryGetValue(publisherSessionId, out var subscriptions))
             {
                 foreach (var item in subscriptions)
                 {
+                    var targetSessionId = item.Key;
                     var meta = item.Value;
-                    AddTarget(item.Key, wantVideo: meta.SubVideo, wantPose: meta.SubPose, wantAudio: meta.SubAudio, wantTelemetryLowRate: meta.SubTelemetryLowRate, wantTelemetryHighRate: meta.SubTelemetryHighRate);
+                    if (!IsSubscribed(meta, mediaKind)) continue;
+
+                    hasSubscription = true;
+                    if (string.IsNullOrEmpty(targetSessionId)) continue;
+                    if (!_memory.Sessions.TryGetValue(targetSessionId, out var target) || target.UdpEndpoint == null) continue;
+
+                    var endpoint = target.UdpEndpoint;
+                    if (endpoint.Equals(sourceEndpoint)) continue;
+
+                    var counter = _forwardingMetrics.GetOrCreateEdge(publisherSessionId, targetSessionId);
+                    var link = _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, mediaKind);
+                    targets.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, link));
                 }
             }
 
-            if (AppConfig.IsBroadcastToAll)
+            if (!hasSubscription)
             {
-                foreach (var session in _memory.Sessions.Values)
-                {
-                    if (session.UdpEndpoint == null) continue;
-                    if (session.SessionId == publisherSessionId) continue;
-                    AddTarget(session.SessionId, wantVideo: true, wantPose: true, wantAudio: true, wantTelemetryLowRate: true, wantTelemetryHighRate: true);
-                }
+                sourceRoute.RemoveRoute(prefix);
+                return;
             }
 
-            var video = new List<UdpForwardTarget>(targets.Count);
-            var pose = new List<UdpForwardTarget>(targets.Count);
-            var audio = new List<UdpForwardTarget>(targets.Count);
-            var telemetryLowRate = new List<UdpForwardTarget>(targets.Count);
-            var telemetryHighRate = new List<UdpForwardTarget>(targets.Count);
+            var ingressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, mediaKind);
+            sourceRoute.SetRoute(prefix, new UdpMediaForwardRoute(targets.ToImmutableArray(), ingressLink));
+        }
 
-            foreach (var item in targets)
+        private static bool IsSubscribed(SubscriptionMeta meta, UdpLinkMediaKind mediaKind)
+        {
+            return mediaKind switch
             {
-                var targetSessionId = item.Key;
-                var (endpoint, counter, wantVideo, wantPose, wantAudio, wantTelemetryLowRate, wantTelemetryHighRate) = item.Value;
+                UdpLinkMediaKind.Video => meta.SubVideo,
+                UdpLinkMediaKind.Pose => meta.SubPose,
+                UdpLinkMediaKind.Audio => meta.SubAudio,
+                UdpLinkMediaKind.TelemetryLowRate => meta.SubTelemetryLowRate,
+                UdpLinkMediaKind.TelemetryHighRate => meta.SubTelemetryHighRate,
+                _ => false
+            };
+        }
 
-                if (wantVideo) video.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.Video)));
-                if (wantPose) pose.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.Pose)));
-                if (wantAudio) audio.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.Audio)));
-                if (wantTelemetryLowRate) telemetryLowRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.TelemetryLowRate)));
-                if (wantTelemetryHighRate) telemetryHighRate.Add(new UdpForwardTarget(endpoint, targetSessionId, counter, _linkMetrics.GetOrCreateEgressLink(publisherSessionId, targetSessionId, UdpLinkMediaKind.TelemetryHighRate)));
+        private static bool TryGetForwardingPrefix(UdpLinkMediaKind mediaKind, out byte prefix)
+        {
+            switch (mediaKind)
+            {
+                case UdpLinkMediaKind.Video:
+                    prefix = 0x01;
+                    return true;
+                case UdpLinkMediaKind.Pose:
+                    prefix = 0x02;
+                    return true;
+                case UdpLinkMediaKind.Audio:
+                    prefix = 0x04;
+                    return true;
+                case UdpLinkMediaKind.TelemetryLowRate:
+                    prefix = 0x05;
+                    return true;
+                case UdpLinkMediaKind.TelemetryHighRate:
+                    prefix = 0x06;
+                    return true;
+                default:
+                    prefix = default;
+                    return false;
             }
-
-            var videoTargets = video.ToImmutableArray();
-            var poseTargets = pose.ToImmutableArray();
-            var audioTargets = audio.ToImmutableArray();
-            var telemetryLowRateTargets = telemetryLowRate.ToImmutableArray();
-            var telemetryHighRateTargets = telemetryHighRate.ToImmutableArray();
-            var videoIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.Video);
-            var poseIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.Pose);
-            var audioIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.Audio);
-            var telemetryLowRateIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.TelemetryLowRate);
-            var telemetryHighRateIngressLink = _linkMetrics.GetOrCreateIngressLink(publisherSessionId, UdpLinkMediaKind.TelemetryHighRate);
-
-            _memory.ForwardingTable[sourceEndpoint] = videoTargets;
-            _memory.PoseForwardingTable[sourceEndpoint] = poseTargets;
-            _memory.AudioForwardingTable[sourceEndpoint] = audioTargets;
-            _memory.TelemetryLowRateForwardingTable[sourceEndpoint] = telemetryLowRateTargets;
-            _memory.TelemetryHighRateForwardingTable[sourceEndpoint] = telemetryHighRateTargets;
-            _memory.SourceRouteTable[sourceEndpoint] = new UdpSourceRoute(
-                publisherSessionId,
-                sourceEndpoint,
-                videoTargets,
-                poseTargets,
-                audioTargets,
-                telemetryLowRateTargets,
-                telemetryHighRateTargets,
-                videoIngressLink,
-                poseIngressLink,
-                audioIngressLink,
-                telemetryLowRateIngressLink,
-                telemetryHighRateIngressLink);
         }
 
         public void RebuildForwardingForSubscriber(string subscriberSessionId)
         {
-            if (AppConfig.IsBroadcastToAll)
-            {
-                foreach (var publisherSessionId in _memory.Sessions.Keys)
-                {
-                    RebuildForwardingForPublisher(publisherSessionId);
-                }
-                return;
-            }
-
-            if (_memory.Pairings.TryGetValue(subscriberSessionId, out var partnerSessionId))
-            {
-                RebuildForwardingForPublisher(partnerSessionId);
-            }
-
             foreach (var item in _memory.SubscriptionMeta)
             {
                 if (item.Value.ContainsKey(subscriberSessionId))
@@ -204,31 +254,6 @@ namespace GrpcHttp3Demo.Sessions
             if (string.IsNullOrEmpty(partnerSessionId))
             {
                 _memory.Pairings.TryGetValue(sessionId, out partnerSessionId);
-            }
-
-            if (!string.IsNullOrEmpty(partnerSessionId) &&
-                _memory.Sessions.TryGetValue(sessionId, out var session) &&
-                _memory.Sessions.TryGetValue(partnerSessionId, out var partner))
-            {
-                string? vrSessionId = null;
-                string? robotSessionId = null;
-
-                if (session.Role == RegisterRequest.Types.EndpointType.Vr && partner.Role == RegisterRequest.Types.EndpointType.Robot)
-                {
-                    vrSessionId = sessionId;
-                    robotSessionId = partnerSessionId;
-                }
-                else if (session.Role == RegisterRequest.Types.EndpointType.Robot && partner.Role == RegisterRequest.Types.EndpointType.Vr)
-                {
-                    vrSessionId = partnerSessionId;
-                    robotSessionId = sessionId;
-                }
-
-                if (!string.IsNullOrEmpty(vrSessionId) && !string.IsNullOrEmpty(robotSessionId))
-                {
-                    _linkMetrics.DeactivateLink(new UdpLinkKey(vrSessionId, vrSessionId, UdpLinkMetricsService.ServerNodeId, UdpLinkDirection.Ingress, UdpLinkMediaKind.Feedback));
-                    _linkMetrics.DeactivateLink(new UdpLinkKey(vrSessionId, UdpLinkMetricsService.ServerNodeId, robotSessionId, UdpLinkDirection.Egress, UdpLinkMediaKind.Feedback));
-                }
             }
 
             if (_memory.Sessions.TryGetValue(sessionId, out var currentSession) && currentSession.UdpEndpoint != null)
