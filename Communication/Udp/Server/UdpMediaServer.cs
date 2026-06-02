@@ -120,8 +120,12 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             {
                 if (enableReusePort)
                 {
-                    socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                    socket.SetSocketOption(SocketOptionLevel.Socket, (SocketOptionName)LinuxReusePortOption, 1);
+                    // SO_REUSEPORT = 15 at SOL_SOCKET level on Linux.
+                    // Use SetRawSocketOption to bypass .NET's SocketOptionName enum mapping,
+                    // which may reject undefined enum values on some runtimes.
+                    Span<byte> reusePortVal = stackalloc byte[4];
+                    BitConverter.TryWriteBytes(reusePortVal, 1);
+                    socket.SetRawSocketOption((int)SocketOptionLevel.Socket, LinuxReusePortOption, reusePortVal);
                 }
 
                 // Tune OS socket buffers to reduce kernel drops under high bitrate/bursty traffic.
