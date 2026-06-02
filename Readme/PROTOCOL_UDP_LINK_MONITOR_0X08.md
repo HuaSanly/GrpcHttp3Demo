@@ -98,9 +98,10 @@
 - `prefix`：固定为字符串 `0x08`。
 - `topics`：固定为 `["udp_link_metrics"]`。
 - `linksUpdatedUtc`：链路统计服务最近一次 tick 时间。
-- `activeOnly`：当前推送是否仅包含活跃链路；当前固定为 `true`。
 - `subscribedTopologyId`：当前订阅目标请求的唯一 `topologyId`。
 - `links`：raw link 数组。
+
+> `activeOnly` 字段已废弃，当前所有链路均基于订阅/配对意图创建，不再区分活跃/非活跃状态。
 
 示例：
 
@@ -113,7 +114,6 @@
   "prefix": "0x08",
   "topics": ["udp_link_metrics"],
   "linksUpdatedUtc": "2026-05-30T08:00:00Z",
-  "activeOnly": true,
   "subscribedTopologyId": "top_2f0d3f14a14b9cde",
   "links": [
     {
@@ -123,7 +123,6 @@
       "targetNodeId": "system:udp",
       "direction": "ingress",
       "mediaKind": "video",
-      "active": true,
       "firstSeenUtc": "2026-05-30T07:58:00Z",
       "lastSeenUtc": "2026-05-30T08:00:00Z"
     }
@@ -141,7 +140,6 @@
 - `targetNodeId`：当前链路段终点；通常是目标 session 或 `system:udp`。
 - `direction`：`ingress` 或 `egress`。
 - `mediaKind`：链路媒体类型。
-- `active`：当前是否活跃。
 - `firstSeenUtc`：该 raw `linkId` 首次创建时间。
 - `lastSeenUtc`：该链路最近一次计数时间。
 - `received`
@@ -155,6 +153,10 @@
 - `sendFail`
 - `retry`
 - `failureReasons`
+
+> `active` 字段已移除。当前链路是否存在只取决于订阅/配对意图，不再单独输出活跃标志。
+>
+> `queueEnqueued`、`queueDropped`、`retry` 在当前 Direct 发送模式下恒为 0，保留字段仅用于兼容。
 
 ### 5.1 `direction`
 
@@ -228,14 +230,9 @@
 
 兼容别名：`GET /api/monitor/udp/links`
 
-Query：
-
-- `activeOnly=true|false`
-
 返回字段：
 
 - `updatedUtc`
-- `activeOnly`
 - `items`
 
 其中 `items` 的每个对象表示一个拓扑组，字段如下：
@@ -276,7 +273,6 @@ Query：
 ```json
 {
   "updatedUtc": "2026-05-30T08:00:00Z",
-  "activeOnly": true,
   "items": [
     {
       "topologyId": "top_2f0d3f14a14b9cde",
@@ -327,7 +323,7 @@ Query：
 
 ## 7. 客户端解析建议
 
-- 先调用 `GET /api/monitor/udp/topologies?activeOnly=true` 获取当前可订阅的 `topologyId`。
+- 先调用 `GET /api/monitor/udp/topologies` 获取当前可订阅的 `topologyId`。
 - 用户选择目标拓扑后，再调用 `POST /api/client/monitor/topology-subscriptions`，携带对应的 `topologyId`。
 - UDP 收到 `0x08` 后，使用 `subscribedTopologyId` 校验订阅目标，并用 `links` 渲染该拓扑组下的 raw link 详情。
 - `0x08` 是高频可丢监控数据，不保证可靠重传。
@@ -337,4 +333,7 @@ Query：
 - 后续新增 raw link 字段时，客户端应忽略未识别字段。
 - raw `linkId` 当前仅保证单次进程生命周期内稳定；重启服务后可能变化。
 - `topologyId` 取决于当前拓扑成员集合；拓扑关系变化时可能变化。
+- `active` 字段已移除（链路存在仅取决于订阅/配对意图）。
+- `activeOnly` 查询参数和响应字段已废弃。
+- `queueEnqueued`、`queueDropped`、`retry` 在当前 Direct 发送模式下恒为 0，保留仅用于兼容历史客户端。
 - 当前文档只描述现已上线的 `udp_link_metrics` topic 和 `0x08` 包结构。

@@ -405,9 +405,10 @@ JSON envelope 字段：
   "udp_link_metrics"
 ]`。
 - `linksUpdatedUtc`：链路统计服务最近一次 tick 时间。
-- `activeOnly`：当前固定为 `true`。
 - `subscribedTopologyId`：本次 `0x08` 实际按哪个 `topologyId` 过滤。
 - `links`：raw link 数组。
+
+> `activeOnly` 字段已废弃。当前所有链路均基于订阅/配对意图存在，不再区分活跃/非活跃。
 
 `links` 里的每个元素仍然是细粒度 raw link，对象字段保持不变：
 
@@ -417,7 +418,6 @@ JSON envelope 字段：
 - `targetNodeId`
 - `direction`
 - `mediaKind`
-- `active`
 - `firstSeenUtc`
 - `lastSeenUtc`
 - `received`
@@ -431,6 +431,8 @@ JSON envelope 字段：
 - `sendFail`
 - `retry`
 - `failureReasons`
+
+> `active` 字段已移除。`queueEnqueued`、`queueDropped`、`retry` 在当前 Direct 发送模式下恒为 0。
 
 接收示例：
 
@@ -454,7 +456,7 @@ if (result.Buffer.Length > 1)
 
 推荐接入流程：
 
-1. 先调用 `GET /api/monitor/udp/topologies?activeOnly=true` 获取当前活跃拓扑组。
+1. 先调用 `GET /api/monitor/udp/topologies` 获取当前拓扑组。
 2. 让用户或前端逻辑选择关注的 `topologyId`。
 3. 调用 `POST /api/client/monitor/topology-subscriptions` 时携带 `topologyId`。
 4. `0x08` 收到后，以 `subscribedTopologyId` 和 `links` 渲染当前拓扑组下的 raw link 明细，而不是假设服务端会返回全量拓扑。
@@ -474,17 +476,16 @@ if (result.Buffer.Length > 1)
 
 其中 `/api/monitor/udp/stats` 默认仅在 Development 环境启用；非 Development 需要配置 `Monitoring:Enabled=true`。
 
-`/api/monitor/udp/topologies` 同样受相同监控开关控制，支持查询参数：
-
-- `activeOnly=true|false`
+`/api/monitor/udp/topologies` 同样受相同监控开关控制。
 
 兼容别名：`/api/monitor/udp/links`。
 
 返回字段：
 
 - `updatedUtc`
-- `activeOnly`
 - `items`
+
+> `activeOnly` 查询参数和响应字段已废弃。
 
 `items` 中每个对象表示一个拓扑组，包含：
 
