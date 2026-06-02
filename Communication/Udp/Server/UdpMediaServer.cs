@@ -43,7 +43,6 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private const byte TopologyMonitorPrefix = 0x08;
         private const long DataActivityUpdateIntervalMs = 1000;
         private const long DackIntervalMs = 5000;
-        private const int LinuxReusePortOption = 15;
 
         public UdpMediaServer(SessionMemoryStore memory, UdpSessionBindingService udpBindings, UdpMetricsService metrics, UdpLinkMetricsService linkMetrics, SignalingMetricsService signalingMetrics, SessionPresence presence, SessionLivenessOptions livenessOptions, ILogger<UdpMediaServer> logger, IConfiguration configuration)
         {
@@ -120,12 +119,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             {
                 if (enableReusePort)
                 {
-                    // SO_REUSEPORT = 15 at SOL_SOCKET level on Linux.
-                    // Use SetRawSocketOption to bypass .NET's SocketOptionName enum mapping,
-                    // which may reject undefined enum values on some runtimes.
-                    Span<byte> reusePortVal = stackalloc byte[4];
-                    BitConverter.TryWriteBytes(reusePortVal, 1);
-                    socket.SetRawSocketOption((int)SocketOptionLevel.Socket, LinuxReusePortOption, reusePortVal);
+                    // On Linux, .NET's SocketOptionName.ReuseAddress internally
+                    // calls BOTH SO_REUSEPORT and SO_REUSEADDR via setsockopt().
+                    // See dotnet/runtime: src/native/libs/System.Native/pal_networking.c
+                    // (SystemNative_SetSockOpt, SOL_SOCKET case).
+                    socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 }
 
                 // Tune OS socket buffers to reduce kernel drops under high bitrate/bursty traffic.
