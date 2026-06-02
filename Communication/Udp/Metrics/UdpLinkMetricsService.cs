@@ -697,6 +697,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             return error switch
             {
                 SocketError.NoBufferSpaceAvailable => UdpLinkFailureKind.NoBufferSpace,
+                SocketError.WouldBlock => UdpLinkFailureKind.NoBufferSpace,
                 SocketError.HostUnreachable => UdpLinkFailureKind.HostUnreachable,
                 SocketError.NetworkUnreachable => UdpLinkFailureKind.NetworkUnreachable,
                 SocketError.TimedOut => UdpLinkFailureKind.TimedOut,

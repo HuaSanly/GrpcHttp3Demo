@@ -405,7 +405,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Metrics
             Interlocked.Increment(ref _txFailPacketsThisSecond);
             Interlocked.Add(ref _txFailBytesThisSecond, lengthBytes);
 
-            if (error == SocketError.NoBufferSpaceAvailable)
+            if (error == SocketError.NoBufferSpaceAvailable || error == SocketError.WouldBlock)
             {
                 Interlocked.Increment(ref _txFailNoBufferTotal);
                 Interlocked.Increment(ref _txFailNoBufferThisSecond);

@@ -8,8 +8,6 @@ using GrpcHttp3Demo.Communication.Grpc.Monitoring;
 using GrpcHttp3Demo.Communication.Udp.Binding;
 using GrpcHttp3Demo.Communication.Udp.Metrics;
 using GrpcHttp3Demo.Communication.Udp.Parsing;
-using GrpcHttp3Demo.Communication.Udp.Routing;
-using GrpcHttp3Demo.Communication.Udp.Sending;
 using GrpcHttp3Demo.Models.Session;
 using GrpcHttp3Demo.Models.Udp;
 using GrpcHttp3Demo.Sessions;
@@ -30,12 +28,12 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private readonly ILogger<UdpMediaServer> _logger;
         private readonly int _port;
         private readonly int _receiveDatagramBufferBytes;
-
-        private readonly UdpForwardingOptions _forwardingOptions;
-        private readonly UdpForwardingSendMode _sendMode;
-        private UdpPerTargetSendQueue? _sendQueue;
-        private UdpSendDispatcher? _sendDispatcher;
-        private UdpSendDispatcher? _monitorSendDispatcher;
+        private readonly int? _receiveSocketBufferBytes;
+        private readonly int? _sendSocketBufferBytes;
+        private readonly Socket[] _receiveSockets;
+        private readonly int _receivePipelineCount;
+        private readonly bool _reusePortEnabled;
+        private readonly bool _nonBlockingSend;
 
         // Optional data-plane keepalive ack (DACK): per remote endpoint, at most once per 5 seconds.
         private static readonly byte[] DackBytes = "DACK"u8.ToArray();
@@ -45,7 +43,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
         private const byte TopologyMonitorPrefix = 0x08;
         private const long DataActivityUpdateIntervalMs = 1000;
         private const long DackIntervalMs = 5000;
-        private const int DefaultMonitorQueueCapacity = 128;
+        private const int LinuxReusePortOption = 15;
 
         public UdpMediaServer(SessionMemoryStore memory, UdpSessionBindingService udpBindings, UdpMetricsService metrics, UdpLinkMetricsService linkMetrics, SignalingMetricsService signalingMetrics, SessionPresence presence, SessionLivenessOptions livenessOptions, ILogger<UdpMediaServer> logger, IConfiguration configuration)
         {
@@ -58,71 +56,142 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             _livenessOptions = livenessOptions;
             _logger = logger;
             _port = configuration.GetValue<int>("MediaServer:UdpPort", 7778);
-            _forwardingOptions = configuration.GetSection("MediaServer:UdpForwarding").Get<UdpForwardingOptions>() ?? new UdpForwardingOptions();
-            _sendMode = _forwardingOptions.ResolveSendMode();
             _receiveDatagramBufferBytes = Math.Clamp(
                 configuration.GetValue<int?>("MediaServer:UdpSocket:ReceiveDatagramBufferBytes") ?? 65_535,
                 2_048,
                 65_535);
+            _receiveSocketBufferBytes = configuration.GetValue<int?>("MediaServer:UdpSocket:ReceiveBufferBytes");
+            _sendSocketBufferBytes = configuration.GetValue<int?>("MediaServer:UdpSocket:SendBufferBytes");
 
-            _udpSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-
-            // Tune OS socket buffers to reduce drops under high bitrate/bursty send.
-            // These are best-effort; OS may clamp to system limits.
-            var recvBuf = configuration.GetValue<int?>("MediaServer:UdpSocket:ReceiveBufferBytes");
-            if (recvBuf is int rb && rb > 0)
+            var requestedPipelineCount = Math.Clamp(
+                configuration.GetValue<int?>("MediaServer:UdpSocket:ReceivePipelineCount") ?? 1,
+                1,
+                Math.Max(1, Environment.ProcessorCount * 2));
+            if (requestedPipelineCount > 1 && !OperatingSystem.IsLinux())
             {
-                _udpSocket.ReceiveBufferSize = rb;
+                _logger.LogWarning("UDP receive pipeline count {PipelineCount} requested, but SO_REUSEPORT multi-bind is enabled only on Linux. Falling back to one receive pipeline.", requestedPipelineCount);
+                requestedPipelineCount = 1;
             }
 
-            var sendBuf = configuration.GetValue<int?>("MediaServer:UdpSocket:SendBufferBytes");
-            if (sendBuf is int sb && sb > 0)
+            var enableReusePort = requestedPipelineCount > 1;
+            _receiveSockets = CreateReceiveSockets(requestedPipelineCount, enableReusePort);
+            _udpSocket = _receiveSockets[0];
+            _receivePipelineCount = _receiveSockets.Length;
+            _reusePortEnabled = enableReusePort && _receivePipelineCount > 1;
+            _nonBlockingSend = configuration.GetValue<bool?>("MediaServer:UdpSocket:NonBlockingSend") ?? _reusePortEnabled;
+            if (_nonBlockingSend)
             {
-                _udpSocket.SendBufferSize = sb;
+                for (var i = 0; i < _receiveSockets.Length; i++)
+                {
+                    _receiveSockets[i].Blocking = false;
+                }
             }
+        }
 
-            _udpSocket.Bind(new IPEndPoint(IPAddress.Any, _port));
+        private Socket[] CreateReceiveSockets(int requestedPipelineCount, bool enableReusePort)
+        {
+            var sockets = new List<Socket>(requestedPipelineCount);
+            try
+            {
+                for (var i = 0; i < requestedPipelineCount; i++)
+                {
+                    sockets.Add(CreateBoundSocket(enableReusePort));
+                }
+
+                return sockets.ToArray();
+            }
+            catch (Exception ex) when (enableReusePort)
+            {
+                CloseSockets(sockets);
+                _logger.LogWarning(ex, "UDP SO_REUSEPORT setup failed; falling back to one receive pipeline.");
+                return new[] { CreateBoundSocket(enableReusePort: false) };
+            }
+            catch
+            {
+                CloseSockets(sockets);
+                throw;
+            }
+        }
+
+        private Socket CreateBoundSocket(bool enableReusePort)
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            try
+            {
+                if (enableReusePort)
+                {
+                    socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                    socket.SetSocketOption(SocketOptionLevel.Socket, (SocketOptionName)LinuxReusePortOption, 1);
+                }
+
+                // Tune OS socket buffers to reduce kernel drops under high bitrate/bursty traffic.
+                // These are best-effort; OS may clamp to system limits.
+                if (_receiveSocketBufferBytes is int rb && rb > 0)
+                {
+                    socket.ReceiveBufferSize = rb;
+                }
+
+                if (_sendSocketBufferBytes is int sb && sb > 0)
+                {
+                    socket.SendBufferSize = sb;
+                }
+
+                socket.Bind(new IPEndPoint(IPAddress.Any, _port));
+                return socket;
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+
+        private void CloseReceiveSockets()
+        {
+            CloseSockets(_receiveSockets);
+        }
+
+        private static void CloseSockets(IEnumerable<Socket> sockets)
+        {
+            foreach (var socket in sockets)
+            {
+                try
+                {
+                    socket.Close();
+                }
+                catch
+                {
+                    // Socket close is best-effort during shutdown/fallback.
+                }
+            }
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation($"UDP Media Server started on port {_port}. sendMode={_sendMode}, receiveDatagramBufferBytes={_receiveDatagramBufferBytes}");
-
-            // Control-plane replies keep the small 256-packet micro-buffer. Media uses the selected send mode.
-            _sendDispatcher = new UdpSendDispatcher(_udpSocket, _metrics, _logger, _forwardingOptions);
-            var monitorQueueCapacity = Math.Clamp(
-                _forwardingOptions.QueueCapacityPerTarget > 0 ? Math.Min(_forwardingOptions.QueueCapacityPerTarget, DefaultMonitorQueueCapacity) : DefaultMonitorQueueCapacity,
-                16,
-                1024);
-            _monitorSendDispatcher = new UdpSendDispatcher(
-                _udpSocket,
-                _metrics,
-                _logger,
-                _forwardingOptions,
-                capacity: monitorQueueCapacity,
-                workerName: "UdpMonitorSendWorker",
-                queueFullLogMessage: "UDP monitor queue full; dropping 0x07/0x08 packet to protect media plane.");
-            _sendQueue = _sendMode == UdpForwardingSendMode.PerTargetQueue
-                ? new UdpPerTargetSendQueue(_udpSocket, _metrics, _logger, _forwardingOptions)
-                : null;
+            _logger.LogInformation(
+                "UDP Media Server started on port {Port}. receiveDatagramBufferBytes={ReceiveDatagramBufferBytes}, receivePipelines={ReceivePipelines}, reusePort={ReusePort}, nonBlockingSend={NonBlockingSend}",
+                _port,
+                _receiveDatagramBufferBytes,
+                _receivePipelineCount,
+                _reusePortEnabled,
+                _nonBlockingSend);
 
             using var closeRegistration = stoppingToken.Register(static state =>
             {
-                try
-                {
-                    ((Socket)state!).Close();
-                }
-                catch
-                {
-                    // Socket close is best-effort during shutdown.
-                }
-            }, _udpSocket);
+                CloseSockets((Socket[])state!);
+            }, _receiveSockets);
 
-            var receiveTask = Task.Factory.StartNew(
-                () => ReceiveLoop(stoppingToken),
-                CancellationToken.None,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
+            var receiveTasks = new Task[_receiveSockets.Length];
+            for (var i = 0; i < _receiveSockets.Length; i++)
+            {
+                var socket = _receiveSockets[i];
+                var pipelineIndex = i;
+                receiveTasks[i] = Task.Factory.StartNew(
+                    () => ReceiveLoop(socket, pipelineIndex, stoppingToken),
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+            }
 
             _ = Task.Factory.StartNew(
                 () => SystemMonitorPushLoop(stoppingToken),
@@ -132,24 +201,11 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
 
             try
             {
-                await receiveTask.ConfigureAwait(false);
+                await Task.WhenAll(receiveTasks).ConfigureAwait(false);
             }
             finally
             {
-                if (_sendQueue != null)
-                {
-                    await _sendQueue.StopAsync();
-                }
-
-                if (_sendDispatcher != null)
-                {
-                    await _sendDispatcher.StopAsync();
-                }
-
-                if (_monitorSendDispatcher != null)
-                {
-                    await _monitorSendDispatcher.StopAsync();
-                }
+                CloseReceiveSockets();
             }
         }
 
@@ -183,7 +239,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                                 ref runtimeTablesSnapshot,
                                 ref topicNamesCache);
                             target.Link.RecordForwardPlanned(payload.Length);
-                            EnqueueMonitor(target, payload, SystemMonitorPrefix, target.Link);
+                            SendDirect(_udpSocket, target.Endpoint, payload, payload.Length, SystemMonitorPrefix, target.Link);
                         }
                     }
 
@@ -194,7 +250,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
 
                         var payload = BuildTopologyMonitorPayload(target);
                         target.Link.RecordForwardPlanned(payload.Length);
-                        EnqueueMonitor(target.Endpoint, payload, TopologyMonitorPrefix, target.Link);
+                        SendDirect(_udpSocket, target.Endpoint, payload, payload.Length, TopologyMonitorPrefix, target.Link);
                     }
                 }
                 catch (Exception ex)
@@ -287,51 +343,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             return payload;
         }
 
-        private void EnqueueMonitor(UdpSystemMonitorTarget target, byte[] payload, byte prefix, UdpRuntimeLink link)
-        {
-            if (_monitorSendDispatcher != null)
-            {
-                _monitorSendDispatcher.Enqueue(target.Endpoint, payload, prefix, link);
-                return;
-            }
-
-            SendMonitor(target.Endpoint, payload, prefix, link);
-        }
-
-        private void EnqueueMonitor(IPEndPoint endpoint, byte[] payload, byte prefix, UdpRuntimeLink link)
-        {
-            if (_monitorSendDispatcher != null)
-            {
-                _monitorSendDispatcher.Enqueue(endpoint, payload, prefix, link);
-                return;
-            }
-
-            SendMonitor(endpoint, payload, prefix, link);
-        }
-
-        private void SendMonitor(EndPoint endpoint, byte[] payload, byte prefix, UdpRuntimeLink link)
-        {
-            try
-            {
-                _metrics.RecordTxAttempt(payload.Length, prefix);
-                link.RecordSendAttempt(payload.Length);
-                _udpSocket.SendTo(payload, SocketFlags.None, endpoint);
-                _metrics.RecordTxSuccess(payload.Length, prefix);
-                link.RecordSendSuccess(payload.Length);
-            }
-            catch (SocketException ex)
-            {
-                _metrics.RecordTxFailure(payload.Length, prefix, ex.SocketErrorCode);
-                link.RecordSendFailure(payload.Length, ex.SocketErrorCode);
-            }
-            catch (Exception)
-            {
-                _metrics.RecordTxFailure(payload.Length, prefix, SocketError.SocketError);
-                link.RecordSendFailure(payload.Length, SocketError.SocketError);
-            }
-        }
-
-        private void ReceiveLoop(CancellationToken stoppingToken)
+        private void ReceiveLoop(Socket socket, int pipelineIndex, CancellationToken stoppingToken)
         {
             var buffer = new byte[_receiveDatagramBufferBytes];
             EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
@@ -340,69 +352,31 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             {
                 try
                 {
-                    remote = new IPEndPoint(IPAddress.Any, 0);
-                    var length = _udpSocket.ReceiveFrom(buffer, 0, buffer.Length, SocketFlags.None, ref remote);
-                    var remoteEp = (IPEndPoint)remote;
-
-                    if (length == 0) continue;
-
-                    byte prefix = buffer[0];
-                    _metrics.RecordRxPacket(length, prefix);
-
-                    switch (prefix)
-                    {
-                        case (byte)'H':
-                        case (byte)'P':
-                            HandleControlPacket(buffer.AsSpan(0, length), remoteEp);
-                            continue;
-
-                        case 0x03:
-                            if (_memory.TryGetFeedbackForward(remoteEp, out var feedbackTarget))
-                            {
-                                feedbackTarget.IngressLink.RecordReceived(length);
-                                feedbackTarget.IngressLink.RecordRouteMatched(length);
-                                feedbackTarget.EgressLink.RecordForwardPlanned(length);
-                                feedbackTarget.Counter.RecordFeedback(length);
-                                byte[]? queuedPayload = null;
-                                SendMedia(feedbackTarget.RobotEndpoint, buffer, length, prefix, feedbackTarget.EgressLink, ref queuedPayload);
-                            }
-                            else
-                            {
-                                RecordIngressRouteMiss(remoteEp, UdpLinkMediaKind.Feedback, length, UdpLinkFailureKind.NoRoute);
-                            }
-                            continue;
-                    }
-
-                    if (!TryMapMediaKind(prefix, out var mediaKind))
+                    if (_nonBlockingSend && !socket.Poll(100_000, SelectMode.SelectRead))
                     {
                         continue;
                     }
 
-                    if (!_memory.TryGetSourceRoute(remoteEp, out var route) || route == null)
+                    while (!stoppingToken.IsCancellationRequested)
                     {
-                        RecordIngressRouteMiss(remoteEp, mediaKind, length, UdpLinkFailureKind.NoRoute);
-                        continue;
+                        remote = new IPEndPoint(IPAddress.Any, 0);
+                        int length;
+                        try
+                        {
+                            length = socket.ReceiveFrom(buffer, 0, buffer.Length, SocketFlags.None, ref remote);
+                        }
+                        catch (SocketException ex) when (_nonBlockingSend && IsWouldBlock(ex.SocketErrorCode))
+                        {
+                            break;
+                        }
+
+                        ProcessDatagram(socket, buffer, length, (IPEndPoint)remote);
+
+                        if (!_nonBlockingSend)
+                        {
+                            break;
+                        }
                     }
-
-                    RecordDataActivityAndMaybeDack(route, remoteEp);
-
-                    if (!route.TryGetRoute(prefix, out var mediaRoute))
-                    {
-                        RecordIngressRouteMiss(remoteEp, mediaKind, length, UdpLinkFailureKind.NoRoute);
-                        continue;
-                    }
-
-                    mediaRoute.IngressLink.RecordReceived(length);
-
-                    var targets = mediaRoute.Targets;
-                    if (targets.Length == 0)
-                    {
-                        mediaRoute.IngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
-                        continue;
-                    }
-
-                    mediaRoute.IngressLink.RecordRouteMatched(length);
-                    ForwardMediaTargets(mediaKind, targets, buffer, length, prefix);
                 }
                 catch (ObjectDisposedException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -414,20 +388,81 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "UDP Receive Error");
+                    _logger.LogError(ex, "UDP Receive Error on pipeline {PipelineIndex}", pipelineIndex);
                 }
             }
         }
 
-        private void ForwardMediaTargets(UdpLinkMediaKind mediaKind, ImmutableArray<UdpForwardTarget> targets, byte[] buffer, int length, byte prefix)
+        private void ProcessDatagram(Socket socket, byte[] buffer, int length, IPEndPoint remoteEp)
         {
-            byte[]? queuedPayload = null;
+            if (length == 0) return;
+
+            byte prefix = buffer[0];
+            _metrics.RecordRxPacket(length, prefix);
+
+            switch (prefix)
+            {
+                case (byte)'H':
+                case (byte)'P':
+                    HandleControlPacket(socket, buffer.AsSpan(0, length), remoteEp);
+                    return;
+
+                case 0x03:
+                    if (_memory.TryGetFeedbackForward(remoteEp, out var feedbackTarget))
+                    {
+                        feedbackTarget.IngressLink.RecordReceived(length);
+                        feedbackTarget.IngressLink.RecordRouteMatched(length);
+                        feedbackTarget.EgressLink.RecordForwardPlanned(length);
+                        feedbackTarget.Counter.RecordFeedback(length);
+                        SendDirect(socket, feedbackTarget.RobotEndpoint, buffer, length, prefix, feedbackTarget.EgressLink);
+                    }
+                    else
+                    {
+                        RecordIngressRouteMiss(remoteEp, UdpLinkMediaKind.Feedback, length, UdpLinkFailureKind.NoRoute);
+                    }
+                    return;
+            }
+
+            if (!TryMapMediaKind(prefix, out var mediaKind))
+            {
+                return;
+            }
+
+            if (!_memory.TryGetSourceRoute(remoteEp, out var route) || route == null)
+            {
+                RecordIngressRouteMiss(remoteEp, mediaKind, length, UdpLinkFailureKind.NoRoute);
+                return;
+            }
+
+            RecordDataActivityAndMaybeDack(route, remoteEp, socket);
+
+            if (!route.TryGetRoute(prefix, out var mediaRoute))
+            {
+                RecordIngressRouteMiss(remoteEp, mediaKind, length, UdpLinkFailureKind.NoRoute);
+                return;
+            }
+
+            mediaRoute.IngressLink.RecordReceived(length);
+
+            var targets = mediaRoute.Targets;
+            if (targets.Length == 0)
+            {
+                mediaRoute.IngressLink.RecordRouteMiss(length, UdpLinkFailureKind.NoTarget);
+                return;
+            }
+
+            mediaRoute.IngressLink.RecordRouteMatched(length);
+            ForwardMediaTargets(socket, mediaKind, targets, buffer, length, prefix);
+        }
+
+        private void ForwardMediaTargets(Socket socket, UdpLinkMediaKind mediaKind, ImmutableArray<UdpForwardTarget> targets, byte[] buffer, int length, byte prefix)
+        {
             for (var i = 0; i < targets.Length; i++)
             {
                 var dest = targets[i];
                 RecordForwardCounter(dest.Counter, mediaKind, length);
                 dest.Link.RecordForwardPlanned(length);
-                SendMedia(dest.Endpoint, buffer, length, prefix, dest.Link, ref queuedPayload);
+                SendDirect(socket, dest.Endpoint, buffer, length, prefix, dest.Link);
             }
         }
 
@@ -451,55 +486,29 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             }
         }
 
-        private void SendMedia(IPEndPoint endpoint, byte[] buffer, int length, byte prefix, UdpRuntimeLink link, ref byte[]? queuedPayload)
-        {
-            if (_sendMode == UdpForwardingSendMode.Direct)
-            {
-                SendDirect(endpoint, buffer, length, prefix, link);
-                return;
-            }
-
-            queuedPayload ??= CopyDatagram(buffer, length);
-
-            if (_sendMode == UdpForwardingSendMode.PerTargetQueue && _sendQueue != null)
-            {
-                _sendQueue.Enqueue(endpoint, queuedPayload, prefix, link);
-                return;
-            }
-
-            _sendDispatcher?.Enqueue(endpoint, queuedPayload, prefix, link);
-        }
-
-        private void SendDirect(IPEndPoint endpoint, byte[] buffer, int length, byte prefix, UdpRuntimeLink link)
+        private void SendDirect(Socket socket, EndPoint endpoint, byte[] buffer, int length, byte prefix, UdpRuntimeLink? link)
         {
             try
             {
                 _metrics.RecordTxAttempt(length, prefix);
-                link.RecordSendAttempt(length);
-                _udpSocket.SendTo(buffer, 0, length, SocketFlags.None, endpoint);
+                link?.RecordSendAttempt(length);
+                socket.SendTo(buffer, 0, length, SocketFlags.None, endpoint);
                 _metrics.RecordTxSuccess(length, prefix);
-                link.RecordSendSuccess(length);
+                link?.RecordSendSuccess(length);
             }
             catch (SocketException ex)
             {
                 _metrics.RecordTxFailure(length, prefix, ex.SocketErrorCode);
-                link.RecordSendFailure(length, ex.SocketErrorCode);
+                link?.RecordSendFailure(length, ex.SocketErrorCode);
             }
             catch (Exception)
             {
                 _metrics.RecordTxFailure(length, prefix, SocketError.SocketError);
-                link.RecordSendFailure(length, SocketError.SocketError);
+                link?.RecordSendFailure(length, SocketError.SocketError);
             }
         }
 
-        private static byte[] CopyDatagram(byte[] buffer, int length)
-        {
-            var copy = new byte[length];
-            Buffer.BlockCopy(buffer, 0, copy, 0, length);
-            return copy;
-        }
-
-        private void RecordDataActivityAndMaybeDack(UdpSourceRoute route, IPEndPoint remoteEp)
+        private void RecordDataActivityAndMaybeDack(UdpSourceRoute route, IPEndPoint remoteEp, Socket socket)
         {
             var now = Environment.TickCount64;
             if (route.TryMarkDataActivityDue(now, DataActivityUpdateIntervalMs))
@@ -509,7 +518,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
 
             if (route.TryMarkDackDue(now, DackIntervalMs))
             {
-                _sendDispatcher?.Enqueue(remoteEp, DackBytes, DackBytes[0]);
+                SendControl(socket, remoteEp, DackBytes);
             }
         }
 
@@ -558,7 +567,17 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
             }
         }
 
-        private void HandleControlPacket(ReadOnlySpan<byte> buffer, IPEndPoint remoteEp)
+        private static bool IsWouldBlock(SocketError error)
+        {
+            return error == SocketError.WouldBlock;
+        }
+
+        private void SendControl(Socket socket, IPEndPoint remoteEp, byte[] responseBytes)
+        {
+            SendDirect(socket, remoteEp, responseBytes, responseBytes.Length, responseBytes[0], link: null);
+        }
+
+        private void HandleControlPacket(Socket socket, ReadOnlySpan<byte> buffer, IPEndPoint remoteEp)
         {
             try
             {
@@ -613,7 +632,7 @@ namespace GrpcHttp3Demo.Communication.Udp.Server
                 // 5. Send Response (ACK or PONG)
                 var responseBytes = packet.Type == UdpControlPacketType.Hello ? AckBytes : PongBytes;
 
-                _sendDispatcher?.Enqueue(remoteEp, responseBytes, responseBytes[0]);
+                SendControl(socket, remoteEp, responseBytes);
 
                 if (packet.Type == UdpControlPacketType.Hello)
                 {
