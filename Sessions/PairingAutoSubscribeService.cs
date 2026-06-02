@@ -7,18 +7,18 @@ namespace GrpcHttp3Demo.Sessions
     public sealed class PairingAutoSubscribeService
     {
         private readonly SessionMemoryStore _memory;
-        private readonly SessionSubscription _subscriptions;
+        private readonly IServiceProvider _services;
         private readonly string _persistDir;
         private PairingAutoSubscribeOptions _options;
 
         public PairingAutoSubscribeService(
             SessionMemoryStore memory,
-            SessionSubscription subscriptions,
+            IServiceProvider services,
             PairingAutoSubscribeOptions options,
             IHostEnvironment environment)
         {
             _memory = memory;
-            _subscriptions = subscriptions;
+            _services = services;
             _options = options;
             _persistDir = Path.Combine(environment.ContentRootPath, "Configs");
             Directory.CreateDirectory(_persistDir);
@@ -68,9 +68,10 @@ namespace GrpcHttp3Demo.Sessions
             var rule = _options.FindRule(publisherRole, subscriberRole);
             if (rule == null || rule.MediaKinds.Length == 0) return;
 
+            var subscriptions = _services.GetRequiredService<SessionSubscription>();
             var (subVideo, subPose, subAudio, subTelemetryLowRate, subTelemetryHighRate) = ParseMediaKinds(rule.MediaKinds);
 
-            _subscriptions.UpdateSubscription(
+            subscriptions.UpdateSubscription(
                 publisherId,
                 subscriberId,
                 isSub: true,
@@ -83,7 +84,8 @@ namespace GrpcHttp3Demo.Sessions
 
         private void UnsubscribeAll(string publisherId, string subscriberId)
         {
-            _subscriptions.UpdateSubscription(
+            var subscriptions = _services.GetRequiredService<SessionSubscription>();
+            subscriptions.UpdateSubscription(
                 publisherId,
                 subscriberId,
                 isSub: false,
