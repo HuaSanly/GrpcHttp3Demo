@@ -5,6 +5,7 @@ using GrpcHttp3Demo.Communication.WebSockets;
 using GrpcHttp3Demo.Controllers;
 using GrpcHttp3Demo.Sessions;
 using GrpcHttp3Demo.Storage;
+using GrpcHttp3Demo.StreamCatalog;
 
 namespace GrpcHttp3Demo.Composition
 {
@@ -25,6 +26,7 @@ namespace GrpcHttp3Demo.Composition
                 .AddGrpcModule()          // gRPC + HttpContextAccessor
                 .AddAuthenticationModule() // HTTP admin/client auth
                 .AddStorageModule()       // 内存存储与后续持久化入口
+                .AddStreamCatalogModule() // UDP 流注册表运行时镜像
                 .AddSessionsModule()      // 会话域
                 .AddUdpModule()           // UDP 端点绑定与映射救援
                 .AddHttpApiModule();      // HTTP API Controllers
